@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://127.0.0.1:3000/*)",
+      "Bash(curl -sm* http://127.0.0.1:3000/*)",
+      "Bash(curl -s -X POST http://127.0.0.1:3000/*)",
+      "Bash(curl -s -X PUT*)",
+      "Bash(curl -s -X POST*github.com*)",
+      "Bash(curl -s -H*github.com*)",
+      "Bash(curl -sL*)",
+      "Bash(npm start*)",
+      "Bash(kill $(lsof -t -i:3000)*)",
+      "Bash(lsof -nP -i :3000*)",
+      "Bash(lsof -t -i:3000*)",
+      "Bash(npm run help*)",
+      "Bash(npm run test*)",
+      "Bash(npm run start*)",
+      "Bash(node --version)",
+      "Bash(git add *)",
+      "Bash(git commit*)",
+      "Bash(git tag*)",
+      "Bash(git push*)",
+      "Bash(git clone*)",
+      "Bash(git checkout*)",
+      "Bash(git remote*)",
+      "Bash(git filter-repo*)",
+      "Bash(git -C*)",
+      "Bash(mkdir -p *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~/*)"
+    ]
+  }
+}

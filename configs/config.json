@@ -49,6 +49,16 @@
     ],
     "gemini-cli-oauth": [
       "gemini-antigravity"
+    ],
+    "openai-codex-oauth": [
+      "openai-custom",
+      "github-models",
+      "claude-kiro-oauth"
+    ],
+    "grok-web": [
+      "openai-custom",
+      "nvidia-nim",
+      "github-models"
     ]
   },
   "modelFallbackMapping": {
@@ -157,12 +167,12 @@
       "targetProviderType": "nvidia-nim"
     },
     "gpt-4o": {
-      "targetModel": "claude-sonnet-4-6",
-      "targetProviderType": "gemini-antigravity"
+      "targetModel": "gpt-4o-mini",
+      "targetProviderType": "github-models"
     },
     "gpt-4o-mini": {
-      "targetModel": "gemini-2.5-flash",
-      "targetProviderType": "gemini-antigravity"
+      "targetModel": "o3-mini",
+      "targetProviderType": "github-models"
     },
     "o3-mini": {
       "targetModel": "gemini-2.5-flash-thinking",
@@ -177,8 +187,8 @@
       "targetProviderType": "openai-custom"
     },
     "Meta-Llama-3.1-405B-Instruct": {
-      "targetModel": "claude-sonnet-4-6",
-      "targetProviderType": "gemini-antigravity"
+      "targetModel": "meta-llama/llama-4-maverick",
+      "targetProviderType": "openai-custom"
     },
     "Phi-4": {
       "targetModel": "microsoft/phi-4-reasoning-plus",
