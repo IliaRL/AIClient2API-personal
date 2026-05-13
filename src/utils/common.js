@@ -866,7 +866,20 @@ export async function handleStreamRequest(res, service, model, requestBody, from
         if (shouldSwitchCredential && !credentialMarkedUnhealthy) {
             credentialMarkedUnhealthy = true; // 触发下面的重试逻辑
         }
-        
+
+        // 400 triggered by upstream backend rejection (not payload error): apply model cooldown
+        // across all accounts so retry falls through to modelFallbackMapping immediately.
+        if (shouldSwitchCredential && error.skipErrorCount && status === 400 && model && providerPoolManager) {
+            const cooldownUntil = new Date(Date.now() + 300000); // 5 min
+            if (typeof providerPoolManager.markModelCooldown === 'function') {
+                const providerAccounts = providerPoolManager.providerStatus?.[toProvider] || [];
+                for (const acc of providerAccounts) {
+                    providerPoolManager.markModelCooldown(toProvider, acc.uuid, model, cooldownUntil);
+                }
+                logger.info(`[Provider Pool] Applied 5-min cooldown for model ${model} across all ${toProvider} accounts — forcing modelFallbackMapping`);
+            }
+        }
+
         // 凭证已被标记为不健康后，尝试切换到新凭证重试
         // 不再依赖状态码判断，只要凭证被标记不健康且可以重试，就尝试切换
         if (credentialMarkedUnhealthy && currentRetry < maxRetries && providerPoolManager && CONFIG) {
@@ -1085,7 +1098,20 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         if (shouldSwitchCredential && !credentialMarkedUnhealthy) {
             credentialMarkedUnhealthy = true; // 触发下面的重试逻辑
         }
-        
+
+        // 400 triggered by upstream backend rejection (not payload error): apply model cooldown
+        // across all accounts so retry falls through to modelFallbackMapping immediately.
+        if (shouldSwitchCredential && error.skipErrorCount && status === 400 && model && providerPoolManager) {
+            const cooldownUntil = new Date(Date.now() + 300000); // 5 min
+            if (typeof providerPoolManager.markModelCooldown === 'function') {
+                const providerAccounts = providerPoolManager.providerStatus?.[toProvider] || [];
+                for (const acc of providerAccounts) {
+                    providerPoolManager.markModelCooldown(toProvider, acc.uuid, model, cooldownUntil);
+                }
+                logger.info(`[Provider Pool] Applied 5-min cooldown for model ${model} across all ${toProvider} accounts — forcing modelFallbackMapping`);
+            }
+        }
+
         // 凭证已被标记为不健康后，尝试切换到新凭证重试
         // 不再依赖状态码判断，只要凭证被标记不健康且可以重试，就尝试切换
         if (credentialMarkedUnhealthy && currentRetry < maxRetries && providerPoolManager && CONFIG) {

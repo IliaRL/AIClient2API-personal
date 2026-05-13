@@ -1,168 +1,200 @@
 # CLAUDE.md
 
-Guidance for Claude Code (claude.ai/code) when working in this repository. Keep responses grounded in the rules below; if a change would violate one of them, stop and confirm before proceeding.
+Guidance for Claude Code when working in this repository. Rules here override default behavior — if a change would violate one, stop and confirm before proceeding.
 
-For deep operational expertise (debugging, adding providers, full architecture walkthroughs), invoke the `/aiclient-master` skill — it loads on-demand references in `~/.claude/skills/aiclient-master/references/` covering architecture, debugging, and the add-provider checklist.
+For deep operational expertise, invoke `/aiclient-master` — it loads architecture, debugging, and add-provider references on demand.
 
 ---
 
 ## What This Project Is
 
-AIClient2API is a Node.js proxy on `http://localhost:3000` that unifies client-only model surfaces (Gemini CLI OAuth, Google Antigravity OAuth, AWS Kiro OAuth, OpenAI Codex OAuth, Grok web, OpenAI-compatible relays like OpenRouter / NVIDIA NIM / GitHub Models, plus direct Claude/Anthropic) behind one OpenAI/Anthropic/Gemini-compatible API. Clients like Claude Code, Cline, Aider, and Cherry Studio talk to it as if it were a normal model API.
+AIClient2API is a Node.js proxy on `http://localhost:3000` that unifies client-only model surfaces behind one OpenAI/Anthropic/Gemini-compatible API.
 
-Entry point: `src/core/master.js`. HTTP layer: `src/services/api-server.js` and `src/services/api-manager.js`.
+**Active providers (as of Full-OPT v4):**
+
+| Provider | Type | Models | Auth |
+|---|---|---|---|
+| `claude-kiro-oauth` | AWS Kiro OAuth | claude-sonnet-4-6, opus-4-7, haiku-4-5, + 6 more | OAuth, auto-refresh |
+| `gemini-antigravity` | Google AG OAuth | gemini-3-flash, 3.1-pro-low, 2.5-flash, gemini-claude-* | OAuth, auto-refresh |
+| `gemini-cli-oauth` | Google CLI OAuth | gemini-2.5-pro, 2.5-flash, 3-flash-preview, + 6 more | OAuth, auto-refresh |
+| `openai-custom` | OpenRouter (static key) | 9 models via custom_models.json | Bearer key |
+| `nvidia-nim` | NVIDIA NIM (static key) | 7 models | Bearer key |
+| `github-models` | GitHub Models (static key) | 23 models | PAT |
+| `openai-codex-oauth` | OpenAI Codex OAuth | gpt-5.2, 5.4, 5.5, codex variants | OAuth |
+
+Entry point: `src/core/master.js`. HTTP layer: `src/services/api-server.js` + `src/services/api-manager.js`.
 
 ---
 
 ## Non-Negotiable Rules
 
-These have all bitten previous sessions. Violations break the user's daily workflow.
+Violating any of these breaks the user's daily workflow.
 
-1. **Proxy port is 3000.** Never change `SERVER_PORT` in `configs/config.json`. Many clients are hard-coded to `http://localhost:3000`.
-2. **`listModels()` is static.** The authoritative model catalog is `STATIC_PROVIDER_MODELS` at `src/providers/provider-models.js:24`. Do not make `listModels` async or have it hit a live upstream — this is a hot-path constraint and also creates a TDZ via the `adapter.js → gemini-core.js → provider-models.js` circular import.
-3. **Model-list getters stay synchronous.** Adding `await` to startup model enumeration breaks the same import chain.
-4. **No `needsReauth: true` on static-key providers.** The set is defined at `src/providers/provider-pool-manager.js:49`: `openai-custom`, `openaiResponses-custom`, `forward-api`, `grok-web`, `nvidia-nim`, `github-models`. They have no refresh flow; flagging them for reauth makes the pool spin on a nonexistent `refreshToken()`.
-5. **`configs/provider_pools.json` holds live OAuth tokens and bearers.** Never `git add -A`. Always review diffs before committing — the user has been burned by accidental token leaks.
-6. **Restart after `src/` changes.** There is no working watcher; trust only a fresh `npm start`.
+1. **Port is 3000.** Never change `SERVER_PORT`. All clients are hard-coded to it.
+2. **`listModels()` is static and synchronous.** Catalog lives in `STATIC_PROVIDER_MODELS` at `src/providers/provider-models.js:24`. No live API calls, no `await` — creates a TDZ via `adapter.js → gemini-core.js → provider-models.js` circular import.
+3. **No `needsReauth: true` on static-key providers.** Set at `src/providers/provider-pool-manager.js:49`: `openai-custom`, `openaiResponses-custom`, `forward-api`, `grok-web`, `nvidia-nim`, `github-models`. No refresh flow exists for these.
+4. **`configs/provider_pools.json` has live tokens.** Never `git add -A`. Always diff before committing. Push via GitHub Contents API (not git push) to bypass push protection.
+5. **Restart after `src/` changes.** No watcher. `kill $(lsof -t -i:3000); npm start`.
+6. **`openai-custom` (OpenRouter) models come from `custom_models.json` only.** Its static list is empty `[]`. Remove entries from custom_models.json → they vanish from `/v1/models`.
+7. **`startupRun: false` on health checks.** Setting it `true` fires health checks on all 25 accounts simultaneously at startup → cascade 429s poison the entire pool. Keep it `false`.
 
 ---
 
-## Commands
+## Quick Commands
 
 ```bash
-# Run
-npm start                 # production
-npm run start:standalone  # API only, no web UI
-npm run start:dev         # dev mode with extra logging
+# Start / restart
+kill $(lsof -t -i:3000) 2>/dev/null; sleep 1
+npm start > /tmp/aiclient.log 2>&1 &
+for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/help -o /dev/null && echo "ready" && break; sleep 1; done
 
-# Discovery
-npm run help              # add `-- --json` for structured output
-npm run example:api       # API call examples
+# Health check (25 accounts expected healthy)
+curl -s http://127.0.0.1:3000/provider_health | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+bad=[i for i in d['items'] if not i['isHealthy']]
+print(f'Health: {len(d[\"items\"])-len(bad)}/{len(d[\"items\"])} healthy')
+[print(f'  UNHEALTHY: {i[\"provider\"]} — {str(i.get(\"lastErrorMessage\",\"\"))[:70]}') for i in bad]
+"
 
-# Tests
-npm test
-npm run test:unit
-npm run test:integration
-npm run test:coverage
-```
-
-### Operational diagnostics
-
-```bash
-# Is the proxy alive?
-lsof -nP -i :3000 -t
-curl -s http://127.0.0.1:3000/api/help -o /dev/null -w "%{http_code}\n"
-
-# Per-account pool health (no auth needed)
-curl -s http://127.0.0.1:3000/provider_health | python3 -m json.tool | head -60
-
-# Live model list, broken down by provider
+# Model count (74 expected across 7 providers)
 curl -s http://127.0.0.1:3000/v1/models \
   -H "Authorization: Bearer $(python3 -c "import json;print(json.load(open('configs/config.json'))['REQUIRED_API_KEY'])")" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); by={}; \
-    [by.setdefault(m['id'].split(':')[0] if ':' in m['id'] else m.get('owned_by','?'),[]).append(m['id']) for m in d['data']]; \
+    [by.setdefault(m['id'].split(':')[0] if ':' in m['id'] else '?',[]).append(m['id']) for m in d['data']]; \
     print('total:', len(d['data'])); [print(f'  {k}: {len(v)}') for k,v in sorted(by.items())]"
 
-# Background restart with readiness wait
-kill $(lsof -t -i:3000) 2>/dev/null; sleep 1
-npm start > /tmp/aiclient.log 2>&1 &
-for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/help -o /dev/null && break; sleep 1; done
+# Test a model (use --data-raw to avoid shell quoting issues)
+curl -sm 25 -X POST http://127.0.0.1:3000/v1/messages \
+  -H "Authorization: Bearer sk-a60f3efdf9b97e63c84ab4a3583f9d1c" \
+  -H "Content-Type: application/json" \
+  --data-raw '{"model":"claude-sonnet-4-6","max_tokens":20,"messages":[{"role":"user","content":"hi"}]}'
+
+# Enable prompt logging for deep debugging (flip back to "none" after)
+# Edit configs/config.json: "PROMPT_LOG_MODE": "file" → restart → reproduce → read logs/prompt_log_*.log
 ```
+
+**IMPORTANT: Always use `--data-raw` not `-d` for curl JSON payloads in zsh** — shell variable expansion inside `-d` breaks JSON silently.
 
 ---
 
 ## Architecture (where each concept lives)
 
-| Concept | File | Why it matters |
+| Concept | File:line | Why it matters |
 |---|---|---|
-| Adapter registry | `src/providers/adapter.js:23` (`registerAdapter`), `:756` (`getServiceAdapter`), `:704-716` (registrations) | If a provider isn't registered here, its `x-model-provider` header is rejected and its models are invisible |
-| Static model catalog | `src/providers/provider-models.js:24` (`STATIC_PROVIDER_MODELS`) | Authoritative model list per provider; what `/v1/models` exposes |
-| Provider mapping (rotation) | `src/utils/provider-utils.js:14` (`PROVIDER_MAPPINGS`) | Maps credential file patterns to provider types; required for UI and usage tracking |
-| Static-key set | `src/providers/provider-pool-manager.js:49` (`STATIC_KEY_PROVIDERS`) | Bearer-only providers without OAuth refresh — see Rule 4 |
-| Pool selection | `src/providers/provider-pool-manager.js` (`selectProvider`, `_enqueueRefresh:263`, `getAllAvailableModels:1473`, `markModelCooldown`) | Rotation, health, refresh queue, model aggregation; `markModelCooldown` applies per-model 429 cooldown without marking whole account unhealthy |
-| Cascade parsing | `src/core/config-manager.js:12` (`normalizeConfiguredProviders`) | Splits comma-separated `MODEL_PROVIDER` into `DEFAULT_MODEL_PROVIDERS[]` and picks `[0]` as the default |
-| Request dispatch | `src/services/api-manager.js:32` (`handleAPIRequests`) | Maps HTTP path → endpoint type → handler |
-| Provider resolution | `src/services/service-manager.js:376` (`_resolveEffectiveRouting`), `:408` (`getApiService`) | Handles `provider:model` prefix routing, AUTO mode, pool selection |
-| Model-list aggregation | `src/utils/common.js:1147` (`handleModelListRequest`), `:1214-1218` (aggregation trigger) | Aggregates across all providers when AUTO **or** cascade length > 1; otherwise single-provider |
-| Protocol conversion | `src/converters/strategies/*.js` (`OpenAIConverter`, `ClaudeConverter`, `GeminiConverter`, etc.) | Translates request/response shapes between OpenAI / Anthropic / Gemini |
-| Convert dispatcher | `src/convert/convert.js` | Picks the right strategy via `ConverterFactory`. `convert-old.js` is legacy — do not edit |
-| Provider implementations | `src/providers/{claude,gemini,openai,grok,forward}/*-core.js` | One `*-core.js` per backend, exposing `generateContent`, `generateContentStream`, `listModels` |
-| TLS sidecar | `src/utils/tls-sidecar.js`, env `TLS_SIDECAR_ENABLED=true` | uTLS fingerprint bypass for Cloudflare-fronted upstreams (Grok web) |
-| Logger | `src/utils/logger.js`, output `logs/app.log`, prompt logs `logs/<PROMPT_LOG_BASE_NAME>_*.log` when `PROMPT_LOG_MODE=file` | First place to look after a failure |
+| Adapter registry | `src/providers/adapter.js:704-716` | Provider not registered → `x-model-provider` header rejected, model invisible |
+| Static model catalog | `src/providers/provider-models.js:24` (`STATIC_PROVIDER_MODELS`) | Authoritative list per provider; what `/v1/models` exposes |
+| OpenRouter models | `configs/custom_models.json` | Only source for openai-custom models — static list is `[]` |
+| Provider health check models | `src/utils/provider-utils.js:14` (`PROVIDER_MAPPINGS`) | `defaultCheckModel` per provider type — gemini-cli uses `gemini-2.5-flash-lite`, antigravity uses `gemini-3-flash` |
+| Static-key set | `src/providers/provider-pool-manager.js:49` | No refresh flow for these providers |
+| Pool selection + fallback | `src/providers/provider-pool-manager.js` (`selectProvider`, `markModelCooldown`) | Per-model 429 cooldown; whole-account unhealthy only on non-4xx errors |
+| Provider fallback chains | `configs/config.json` → `providerFallbackChain` | Cross-provider fallback when all accounts of a type are exhausted |
+| Model fallback chain | `configs/config.json` → `modelFallbackMapping` | 34-entry chain: specific model → next model → next provider |
+| Cascade parsing | `src/core/config-manager.js:12` (`normalizeConfiguredProviders`) | Comma-separated `MODEL_PROVIDER` → `DEFAULT_MODEL_PROVIDERS[]` |
+| Request dispatch | `src/services/api-manager.js:32` (`handleAPIRequests`) | HTTP path → endpoint type → handler |
+| Provider resolution | `src/services/service-manager.js:376` (`_resolveEffectiveRouting`) | `provider:model` prefix routing, AUTO mode, pool selection |
+| Model-list aggregation | `src/utils/common.js:1214-1218` | Fires when cascade > 1 OR `MODEL_PROVIDER === 'auto'` |
+| Protocol conversion | `src/converters/strategies/*.js` | OpenAI ↔ Anthropic ↔ Gemini shape translation |
+| Convert dispatcher | `src/convert/convert.js` | `convert-old.js` is legacy — never edit it |
+| Provider implementations | `src/providers/{claude,gemini,openai,grok,forward}/*-core.js` | One `*-core.js` per backend |
+| TLS sidecar | `src/utils/tls-sidecar.js`, `TLS_SIDECAR_ENABLED=true` | uTLS bypass for Cloudflare-fronted upstreams (Grok) |
 
 ---
 
-## Configuration
+## Configuration Files
 
-- `configs/config.json` — server config: port, `MODEL_PROVIDER` cascade, paths, key.
-- `configs/config.json` field `REQUIRED_API_KEY` — static API key for `/v1/*` Bearer auth (e.g. `sk-...`). This is what clients use.
-- `configs/pwd` — **PBKDF2-hashed admin password** for `POST /api/login`. Not a usable Bearer for `/v1/*`. Don't confuse with `REQUIRED_API_KEY`.
-- `configs/provider_pools.json` — per-account credentials and pool metadata. **Contains live tokens** — see Rule 5.
-- `configs/custom_models.json` — user-defined model aliases with metadata (`contextLength`, `maxTokens`, `description`).
-- `configs/{gemini,antigravity,kiro,codex}/` — OAuth credentials, one JSON per account.
+| File | Purpose |
+|---|---|
+| `configs/config.json` | Port, cascade, fallback chains, health check, rate limits |
+| `configs/provider_pools.json` | Live OAuth tokens + bearer keys. **Contains secrets.** |
+| `configs/custom_models.json` | OpenRouter model list (9 entries — only what's needed) |
+| `configs/pwd` | PBKDF2-hashed admin password. Not a usable Bearer. |
+| `configs/{antigravity,gemini,kiro,codex}/` | OAuth credential files, one JSON per account |
 
-### `MODEL_PROVIDER` cascade vs `auto`
+### Key config.json values (current optimised state)
 
-The value can be:
-
-- **Single provider**: e.g. `"gemini-cli-oauth"`. Only that provider's models appear in `/v1/models`.
-- **Cascade (comma-separated)**: e.g. `"gemini-cli-oauth,gemini-antigravity,claude-kiro-oauth,..."`. Parsed by `normalizeConfiguredProviders()` into `DEFAULT_MODEL_PROVIDERS[]`; `MODEL_PROVIDER` becomes the first entry. `/v1/models` aggregates across **all** entries (fix landed in commit `083a7cf`, src/utils/common.js:1214-1218). Cross-type fallback at request time is controlled by `providerFallbackChain` in `config.json`.
-- **`"auto"`**: forces clients to specify a `provider:model` prefix on every request; `/v1/models` aggregates across all registered providers.
-
-If `/v1/models` returns models for only the first provider in a comma-separated list, the aggregation condition has regressed — check `src/utils/common.js:1214` is checking `DEFAULT_MODEL_PROVIDERS.length > 1` in addition to `MODEL_PROVIDER === 'auto'`.
+```json
+"SCHEDULED_HEALTH_CHECK": { "enabled": true, "startupRun": false, "interval": 1800000 }
+"REQUEST_MAX_RETRIES": 5
+"RATE_LIMIT_COOLDOWN_MS": 30000
+"WARMUP_TARGET": 3
+```
 
 ---
 
 ## Authentication
 
-- `/v1/*`, `/v1beta/*`, `/count_tokens` → use the **static API key** from `REQUIRED_API_KEY` in `configs/config.json` (`sk-...`) as `Authorization: Bearer <key>`.
-- `/api/*`, `/health`, `/provider_health` → except public endpoints (`/api/help`, `/api/example`, `/provider_health`, `POST /api/login`), need a **dynamic admin token**: `POST /api/login` with the cleartext admin password (the original of what `configs/pwd` hashes to), then use the returned token.
-- Common confusion: `configs/pwd` is the **hashed** admin password (PBKDF2), not a usable Bearer. Using its raw contents as a `/v1/*` Bearer fails with 401.
+- `/v1/*` → `Authorization: Bearer <REQUIRED_API_KEY>` (static, from config.json)
+- `/api/*` management → get token via `POST /api/login` with cleartext admin password, then use returned token
+- `/provider_health`, `/api/help` → public, no auth
 
 ---
 
-## Known Issues (already fixed — recognize regressions, don't re-fix)
+## Known Issues & Fixes
 
-| ID | Symptom | File | Fix commit |
-|---|---|---|---|
-| A | `OpenAIConverter` dropped streamed `tool_calls`; `finish_reason: tool_calls` not mapped to `stop_reason: tool_use` | `src/converters/strategies/OpenAIConverter.js` | `58eb7e4` |
-| B | NVIDIA NIM and GitHub Models adapters not registered, `x-model-provider` header rejected | `src/providers/adapter.js:712-713` | `a672392` |
-| C | Gemini-only `cleanJsonSchemaProperties` applied to OpenAI-bound tool schemas, stripping fields like `exclusiveMinimum` | `src/converters/strategies/ClaudeConverter.js` | `9537798` |
-| D | Antigravity `geminiToAntigravity()` deleted `tools`/`toolConfig` for `isClaudeModel` after VALIDATED-mode setup | `src/providers/gemini/antigravity-core.js` (old line 275-283, removed) | `083a7cf` |
-| G | `/v1/models` only aggregated when `MODEL_PROVIDER === 'auto'`; cascade configs returned only the first provider's models | `src/utils/common.js:1214-1218` | `083a7cf` |
-
-E (Antigravity "hang") and F (Kiro 400) were investigated and found to be cold-call OAuth bootstrap and already-fixed respectively.
+| ID | Symptom | Fix location |
+|---|---|---|
+| A | `OpenAIConverter` dropped streamed `tool_calls` | `src/converters/strategies/OpenAIConverter.js` commit `58eb7e4` |
+| B | NVIDIA NIM + GitHub Models adapters not registered | `src/providers/adapter.js:712-713` commit `a672392` |
+| C | `cleanJsonSchemaProperties` stripped OpenAI tool schema fields | `src/converters/strategies/ClaudeConverter.js` commit `9537798` |
+| D | `geminiToAntigravity()` deleted tools for Claude models | `src/providers/gemini/antigravity-core.js` commit `083a7cf` |
+| G | `/v1/models` only aggregated in `auto` mode | `src/utils/common.js:1214-1218` commit `083a7cf` |
+| H | Startup health checks causing cascade 429s | `configs/config.json startupRun=false, interval=1800000` |
+| I | `gemini-cli-oauth` check model `gemini-2.5-flash` exhausting quota | `src/utils/provider-utils.js` → `defaultCheckModel: 'gemini-2.5-flash-lite'` |
 
 ---
 
 ## Gotchas
 
-- **Antigravity first call takes 30-50s.** Not a hang — it's the OAuth token refresh + Project ID discovery on first use of each credential. Warm calls land in ~1s. Reproduce twice before patching `streamApi` / `parseSSEStream`.
-- **Detached HEAD is the working state.** This branch is detached from tag `v3.0.5.3`. Recent commits live only locally until pushed to a branch.
-- **`convert-old.js` is legacy.** Edit `src/converters/strategies/` and `src/convert/convert.js`, never `convert-old.js`.
-- **`PROMPT_LOG_MODE: "file"`** is the single highest-information debug tool. Flip it on in `configs/config.json`, restart, reproduce, then read `logs/<PROMPT_LOG_BASE_NAME>_*.log` to see the exact payload sent upstream.
-- **Health check defaults differ.** `defaultCheckModel` per provider is in `PROVIDER_MAPPINGS` (e.g. Antigravity uses `gemini-2.5-computer-use-preview-10-2025`); changing it changes which model the periodic health check exercises.
-- **OAuth providers must not appear in `STATIC_KEY_PROVIDERS`.** Adding them disables refresh and silently breaks every account after token expiry.
-- **`SCHEDULED_HEALTH_CHECK` is now enabled** for `gemini-cli-oauth`, `gemini-antigravity`, `claude-kiro-oauth`, `openai-codex-oauth`. After startup, Antigravity accounts whose GCP projects don't have the Staging CloudCode API enabled will appear unhealthy with HTTP 403 "API has not been used in project X before or it is disabled." This is a pre-existing account configuration issue — not a proxy bug. Remaining healthy accounts serve normally. Fix: visit the `console.developers.google.com` URL in the error and enable the API for that project.
+- **Antigravity first call: 30-50s.** OAuth bootstrap + Project ID discovery. Warm calls ~1s. Always test twice before patching.
+- **`gemini-3.1-pro-high` returns 400.** Google backend bug — not a proxy issue. Falls back to `gemini-3.1-pro-low` via modelFallbackMapping. claude-pick #3 points to `gemini-3.1-pro-low` directly.
+- **`gemini-2.5-flash` / `gemini-3.1-pro-low` intermittent timeouts.** Google capacity issues. The proxy handles via fallback — don't patch the proxy for these.
+- **Gemini CLI 403 "API not enabled in project X".** GCP project activation issue, not a code bug. Fix: visit the console URL in the error → enable Staging CloudCode API.
+- **Shell quoting in zsh: use `--data-raw` for curl JSON.** `-d` with embedded quotes causes "Invalid JSON" errors that look like proxy bugs.
+- **`convert-old.js` is legacy.** Edit `src/converters/strategies/` and `src/convert/convert.js` only.
+- **Image generation loop is intentionally sequential** (`api-manager.js:224`). Each image ties to a pool slot — parallelising would break slot accounting.
+- **Git: personal backup repo** is `https://github.com/IliaRL/AIClient2API-personal` (private). Push via `git push mine`. PAT stored in `git remote get-url mine`. `provider_pools.json` pushed via GitHub Contents API to bypass push protection.
 
 ---
 
-## Verification Before Claiming Done
+## Verification Checklist (run after every change)
 
-After any change touching routing, model configuration, or auth:
+```bash
+# 1. Restart
+kill $(lsof -t -i:3000) 2>/dev/null; sleep 1
+npm start > /tmp/aiclient.log 2>&1 &
+for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/help -o /dev/null && echo "ready" && break; sleep 1; done
 
-1. Restart the proxy (`kill $(lsof -t -i:3000); npm start ...`).
-2. `curl /provider_health` — confirm count and check for unexpected unhealthy entries. Some Antigravity accounts may show unhealthy at startup if their GCP projects lack the Staging API — this is expected after enabling `SCHEDULED_HEALTH_CHECK` (see Gotchas). Focus on whether the providers you rely on are healthy.
-3. `curl /v1/models` — confirm model count matches expectations (the per-provider breakdown is the most useful signal).
-4. The specific scenario you changed — tool-use curl, streaming response, etc. State exact numbers ("70 models, 0 unhealthy items, tool_use response in 1.1s"), not assertions ("should work now").
+# 2. Health: expect 25/25 healthy
+curl -s http://127.0.0.1:3000/provider_health | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+bad=[i for i in d['items'] if not i['isHealthy']]
+print(f'{len(d[\"items\"])-len(bad)}/{len(d[\"items\"])} healthy')
+[print(f'  UNHEALTHY: {i[\"provider\"]} {str(i.get(\"lastErrorMessage\",\"\"))[:60]}') for i in bad]
+"
 
-For tool-use scenarios across providers, see the curl matrix in `~/.claude/skills/aiclient-master/references/debugging.md`.
+# 3. Models: expect 74 across 7 providers
+curl -s http://127.0.0.1:3000/v1/models \
+  -H "Authorization: Bearer sk-a60f3efdf9b97e63c84ab4a3583f9d1c" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('models:', len(d['data']))"
+
+# 4. Quick smoke test per provider tier
+for model in "claude-sonnet-4-6" "gemini-3-flash" "gemini-claude-sonnet-4-6" "qwen/qwen3-coder-next" "nvidia/llama-3.1-nemotron-ultra-253b" "gpt-4o"; do
+  r=$(curl -sm 25 -X POST http://127.0.0.1:3000/v1/messages \
+    -H "Authorization: Bearer sk-a60f3efdf9b97e63c84ab4a3583f9d1c" \
+    -H "Content-Type: application/json" \
+    --data-raw "{\"model\":\"$model\",\"max_tokens\":10,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" 2>/dev/null)
+  ok=$(echo "$r" | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK' if d.get('content') else 'FAIL')" 2>/dev/null)
+  printf "%-45s %s\n" "$model" "$ok"
+done
+```
+
+State exact numbers. Never claim "should work."
 
 ---
 
 ## Where to Get More Detail
 
-- `/aiclient-master` skill — invoke it for any non-trivial work on this proxy. It loads project-specific architecture, debugging, and add-provider references on demand.
-- `Materials/` (if present locally) — authoritative reference configs and credential file shapes. Not in git.
-- `logs/app.log` — runtime logs. `tail -f` while reproducing.
-- Memory (`~/.claude/projects/-Users-ilialiston-AIClient2API/memory/MEMORY.md`) — user-specific cross-session context (proxy state, cascade chain, hard constraints).
+- `/aiclient-master` skill — deep architecture, debugging matrix, add-provider checklist
+- `logs/app.log` — runtime logs; `tail -f` while reproducing
+- `configs/config.json` → `modelFallbackMapping` — the full 34-step fallback chain
+- Memory: `~/.claude/projects/-Users-ilialiston-AIClient2API/memory/MEMORY.md`

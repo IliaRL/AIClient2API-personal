@@ -1109,6 +1109,15 @@ export class AntigravityApiService {
             
             logger.error(`[Antigravity API] Error calling (Status: ${status}, Code: ${errorCode}):`, error.message);
 
+            // 400 from Antigravity = Google backend rejection for this model (not a payload bug).
+            // Signal model fallback so modelFallbackMapping routes to the next model in chain.
+            if (status === 400) {
+                logger.warn(`[Antigravity API] 400 for model ${body?.model || 'unknown'} — triggering model fallback.`);
+                error.shouldSwitchCredential = true;
+                error.skipErrorCount = true;
+                throw error;
+            }
+
             if ((status === 401) && !isRetry) {
                 logger.info('[Antigravity API] Received 401 Unauthorized. Triggering background refresh via PoolManager...');
                 
@@ -1231,6 +1240,14 @@ export class AntigravityApiService {
                 }
 
                 // Mark error for credential switch without recording error count
+                error.shouldSwitchCredential = true;
+                error.skipErrorCount = true;
+                throw error;
+            }
+
+            // 400 in stream path = Google backend model rejection, trigger model fallback
+            if (status === 400) {
+                logger.warn(`[Antigravity API] 400 during stream — triggering model fallback.`);
                 error.shouldSwitchCredential = true;
                 error.skipErrorCount = true;
                 throw error;
