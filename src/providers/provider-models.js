@@ -118,6 +118,15 @@ export const PROVIDER_MODELS = {
         'gpt-5.5',
         'gpt-image-2',
     ],
+    'github-models': [
+        'gpt-5-mini',
+        'claude-haiku-4-5',
+        'gpt-4.1',
+        'gpt-4o'
+    ],
+    'nvidia-nim': [
+        'nvidia/llama-3.1-nemotron-ultra-253b'
+    ],
     'forward-api': [],
     'grok-web': [
         'grok-4.1-mini',
