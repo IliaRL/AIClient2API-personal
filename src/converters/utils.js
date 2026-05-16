@@ -50,6 +50,132 @@ export const OPENAI_RESPONSES_DEFAULT_INPUT_TOKEN_LIMIT = 32768;
 export const OPENAI_RESPONSES_DEFAULT_OUTPUT_TOKEN_LIMIT = 128000;
 
 // =============================================================================
+// 每模型最大输出 token 数 (max output tokens per model)
+// Used to inject accurate per-model defaults when clients omit max_tokens.
+// Values sourced from provider API docs / listModels() introspection.
+// =============================================================================
+export const MODEL_MAX_OUTPUT_TOKENS = {
+    // Gemini CLI OAuth models — API reports outputTokenLimit: 65535
+    'gemini-3.1-pro-preview': 65535,
+    'gemini-3-flash-preview': 65535,
+    'gemini-3.1-flash-lite-preview': 65535,
+    'gemini-2.5-pro': 65535,
+    'gemini-2.5-flash': 65535,
+    'gemini-2.5-flash-lite': 65535,
+    // Gemini Antigravity models
+    'gemini-3-flash': 65535,
+    'gemini-3.1-pro-high': 65535,
+    'gemini-3.1-pro-low': 65535,
+    // Antigravity Claude-via-Gemini models
+    'gemini-claude-sonnet-4-6': 64000,
+    'gemini-claude-opus-4-6-thinking': 32000,
+    // Kiro / Anthropic Claude models
+    'claude-haiku-4-5': 32000,
+    'claude-sonnet-4-5': 64000,
+    'claude-sonnet-4-5-20250929': 64000,
+    // OpenAI Codex OAuth
+    'gpt-5.2': 32768,
+    'gpt-5.3-codex': 32768,
+    'gpt-5.4': 32768,
+    'gpt-5.4-mini': 32768,
+    'gpt-5.5': 32768,
+    // GitHub Models
+    'gpt-4o': 16384,
+    'gpt-4o-mini': 16384,
+    'gpt-4.1': 32768,
+    'gpt-4.1-mini': 32768,
+    'gpt-4.1-nano': 32768,
+    'DeepSeek-R1': 32768,
+    'DeepSeek-V3-0324': 32768,
+    'Meta-Llama-3.1-405B-Instruct': 8192,
+    'Meta-Llama-3.1-8B-Instruct': 8192,
+    'Phi-4': 16384,
+    // NVIDIA NIM
+    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 131072,
+    'nvidia/llama-3.3-nemotron-super-49b-v1': 131072,
+    'meta/llama-4-maverick-17b-128e-instruct': 8192,
+    'meta/llama-3.3-70b-instruct': 131072,
+    'moonshotai/kimi-k2.6': 32768,
+    'minimaxai/minimax-m2.7': 32768,
+    'deepseek-ai/deepseek-v4-pro': 32768,
+    'mistralai/mistral-large-3-675b-instruct-2512': 32768,
+    'mistralai/mistral-small-4-119b-2603': 32768,
+    'openai/gpt-oss-120b': 32768,
+};
+
+// =============================================================================
+// 每模型输入上下文窗口大小 (input context window per model)
+// Used by the status line to show accurate "left" context relative to the
+// actual model in use, not Claude Code's assumed context size.
+// =============================================================================
+export const MODEL_CONTEXT_WINDOWS = {
+    // Gemini models — 1M input context (API reports inputTokenLimit: 1024000)
+    'gemini-3.1-pro-preview': 1048576,
+    'gemini-3-flash-preview': 1048576,
+    'gemini-3.1-flash-lite-preview': 1048576,
+    'gemini-2.5-pro': 1048576,
+    'gemini-2.5-flash': 1048576,
+    'gemini-2.5-flash-lite': 1048576,
+    'gemini-3-flash': 1048576,
+    'gemini-3.1-pro-high': 1048576,
+    'gemini-3.1-pro-low': 1048576,
+    'gemini-claude-sonnet-4-6': 200000,
+    'gemini-claude-opus-4-6-thinking': 200000,
+    // Kiro / Anthropic Claude models
+    'claude-haiku-4-5': 200000,
+    'claude-sonnet-4-5': 200000,
+    'claude-sonnet-4-5-20250929': 200000,
+    // OpenAI Codex OAuth
+    'gpt-5.2': 128000,
+    'gpt-5.3-codex': 128000,
+    'gpt-5.4': 128000,
+    'gpt-5.4-mini': 128000,
+    'gpt-5.5': 128000,
+    // GitHub Models
+    'gpt-4o': 128000,
+    'gpt-4o-mini': 128000,
+    'gpt-4.1': 1000000,
+    'gpt-4.1-mini': 1000000,
+    'gpt-4.1-nano': 1000000,
+    'DeepSeek-R1': 128000,
+    'DeepSeek-V3-0324': 128000,
+    'Meta-Llama-3.1-405B-Instruct': 131072,
+    'Meta-Llama-3.1-8B-Instruct': 131072,
+    'Phi-4': 16384,
+    // NVIDIA NIM
+    'nvidia/llama-3.3-nemotron-super-49b-v1.5': 131072,
+    'nvidia/llama-3.3-nemotron-super-49b-v1': 131072,
+    'meta/llama-4-maverick-17b-128e-instruct': 1048576,
+    'meta/llama-3.3-70b-instruct': 131072,
+    'moonshotai/kimi-k2.6': 131072,
+    'minimaxai/minimax-m2.7': 1000000,
+    'deepseek-ai/deepseek-v4-pro': 65536,
+    'mistralai/mistral-large-3-675b-instruct-2512': 131072,
+    'mistralai/mistral-small-4-119b-2603': 131072,
+    'openai/gpt-oss-120b': 128000,
+};
+
+/**
+ * Returns the max output tokens for a model, falling back to a protocol default.
+ * @param {string} modelId
+ * @param {number} fallback - Protocol-level default to use when model is not in the map
+ * @returns {number}
+ */
+export function getModelMaxOutputTokens(modelId, fallback) {
+    return MODEL_MAX_OUTPUT_TOKENS[modelId] ?? fallback;
+}
+
+/**
+ * Returns the input context window size for a model.
+ * @param {string} modelId
+ * @param {number} [fallback=200000]
+ * @returns {number}
+ */
+export function getModelContextWindow(modelId, fallback = 200000) {
+    return MODEL_CONTEXT_WINDOWS[modelId] ?? fallback;
+}
+
+// =============================================================================
 // 通用辅助函数
 // =============================================================================
 
@@ -157,10 +283,10 @@ export function extractAndProcessSystemMessages(messages, replacements = []) {
     for (const message of messages) {
         if (message.role === 'system' || message.role === 'developer') {
             let content = extractTextFromMessageContent(message.content);
-            
+
             // 应用系统提示词内容替换
             content = applySystemPromptReplacements(content, replacements);
-            
+
             systemContents.push(content);
         } else {
             nonSystemMessages.push(message);
@@ -484,6 +610,7 @@ class ToolStateManager {
         }
         ToolStateManager.instance = this;
         this._toolMappings = {};
+        this._toolSchemas = {};
         return this;
     }
 
@@ -491,28 +618,70 @@ class ToolStateManager {
         this._toolMappings[funcName] = toolId;
     }
 
+    storeToolSchema(funcName, schema) {
+        this._toolSchemas[funcName] = schema;
+    }
+
     getToolId(funcName) {
         return this._toolMappings[funcName] || null;
     }
 
+    getToolSchema(funcName) {
+        return this._toolSchemas[funcName] || null;
+    }
+
     clearMappings() {
         this._toolMappings = {};
+        this._toolSchemas = {};
     }
 }
 
 export const toolStateManager = new ToolStateManager();
 
-// Tools where top-level string fields may arrive as objects from non-Claude models.
-// Using a Set for O(1) lookup on the per-tool-call hot path.
-const SCHEMA_GUARD_TOOLS = new Set(['Skill', 'Agent', 'Bash', 'mcp__ide__executeCode']);
-const SCHEMA_GUARD_FIELDS = ['args', 'prompt', 'command', 'code'];
+/**
+ * Dynamically flattens object-valued arguments to JSON strings based on schema definitions.
+ * Prevents "invalid tool parameters" errors when non-Claude models return nested objects
+ * for properties defined as strings.
+ */
+export function dynamicFlattenToolArguments(toolName, input, schema) {
+    if (!input || typeof input !== 'object') return input;
+
+    // Use provided schema or try to find it in the manager
+    const effectiveSchema = schema || toolStateManager.getToolSchema(toolName);
+    if (!effectiveSchema || !effectiveSchema.properties) {
+        // Fallback to legacy hardcoded flattening if no schema is available
+        return flattenToolArguments(toolName, input);
+    }
+
+    const flattened = { ...input };
+    const properties = effectiveSchema.properties;
+
+    for (const [key, value] of Object.entries(flattened)) {
+        const propSchema = properties[key];
+        if (!propSchema) continue;
+
+        // If the schema says it should be a string, but we got an object/array, stringify it.
+        if (propSchema.type === 'string' && value !== null && typeof value === 'object') {
+            logger.info(`[Dynamic Schema Guard] Stringifying ${key} for tool ${toolName} (type mismatch: expected string, got ${Array.isArray(value) ? 'array' : 'object'})`);
+            flattened[key] = JSON.stringify(value);
+        }
+    }
+
+    return flattened;
+}
 
 /**
  * Flattens object-valued arguments to JSON strings for tools that expect string inputs.
  * Prevents "invalid tool parameters" errors when non-Claude models return nested objects.
+ * @deprecated Use dynamicFlattenToolArguments for schema-aware flattening.
  */
 export function flattenToolArguments(toolName, input) {
     if (!input || typeof input !== 'object') return input;
+
+    // Legacy hardcoded tool guard list
+    const SCHEMA_GUARD_TOOLS = new Set(['Skill', 'Agent', 'Bash', 'mcp__ide__executeCode']);
+    const SCHEMA_GUARD_FIELDS = ['args', 'prompt', 'command', 'code'];
+
     if (!SCHEMA_GUARD_TOOLS.has(toolName)) return input;
 
     const flattened = { ...input };

@@ -8,6 +8,7 @@ import { convertData, getOpenAIStreamChunkStop } from '../convert/convert.js';
 import { ProviderStrategyFactory } from './provider-strategies.js';
 import { getPluginManager } from '../core/plugin-manager.js';
 import { MODEL_PROTOCOL_PREFIX, MODEL_PROVIDER } from './constants.js';
+import { MODEL_MAX_OUTPUT_TOKENS, MODEL_CONTEXT_WINDOWS, GEMINI_DEFAULT_MAX_TOKENS } from '../converters/utils.js';
 
 // ==================== 时间与时区 ====================
 
@@ -389,7 +390,9 @@ function appendCustomModelsToModelList(clientModelList, customEntries, providerT
  */
 export async function updateLastModelFile(model) {
     try {
-        await fs.writeFile('/tmp/aiclient_last_model', model);
+        const maxOutput = MODEL_MAX_OUTPUT_TOKENS[model] ?? GEMINI_DEFAULT_MAX_TOKENS;
+        const contextWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200000;
+        await fs.writeFile('/tmp/aiclient_last_model', JSON.stringify({ model, maxOutput, contextWindow }));
     } catch (err) {
         // Silently ignore errors
     }

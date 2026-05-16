@@ -32,6 +32,12 @@ CLAUDE_PROXY_BACKUP_FILE="${CLAUDE_PROXY_BACKUP_FILE:-$HOME/.claude/proxy_settin
 : "${AICLIENT_BASE:=http://127.0.0.1:3000}"
 : "${AICLIENT_TOKEN:=}"
 
+# Model to use in proxy mode (a model that the proxy serves directly, no fallback needed).
+# Override via env before sourcing if you prefer a different default.
+: "${PROXY_CLI_MODEL:=gemini-claude-sonnet-4-6}"
+# Fallback model for native mode (Anthropic alias).
+: "${NATIVE_CLI_MODEL:=sonnet}"
+
 _claude_mode_require_jq() {
   if ! command -v jq &>/dev/null; then
     echo "ERROR: 'jq' is required. Install with: brew install jq" >&2
@@ -47,6 +53,7 @@ _claude_mode_proxy_alive() {
 }
 
 # Persist (or remove) the proxy env block inside Claude Code's settings.json.
+# Also switches the CLI model so requests route directly without alias fallback.
 _claude_mode_write_settings() {
   local mode="$1" base="$2" token="$3"
   _claude_mode_require_jq || return 1
@@ -54,11 +61,26 @@ _claude_mode_write_settings() {
 
   local tmp="${CLAUDE_SETTINGS_FILE}.tmp.$$"
   if [ "$mode" = "on" ]; then
-    jq --arg base "$base" --arg token "$token" \
-      '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_AUTH_TOKEN = $token' \
+    # Save the current native model before switching so we can restore it later.
+    local old_model
+    old_model="$(jq -r '.model // "sonnet"' "$CLAUDE_SETTINGS_FILE" 2>/dev/null)"
+    local backup_tmp="${CLAUDE_PROXY_BACKUP_FILE}.tmp.$$"
+    if [ -f "$CLAUDE_PROXY_BACKUP_FILE" ]; then
+      jq --arg m "$old_model" '. + {native_model: $m}' "$CLAUDE_PROXY_BACKUP_FILE" >"$backup_tmp" && mv "$backup_tmp" "$CLAUDE_PROXY_BACKUP_FILE"
+    else
+      printf '{"native_model": "%s"}' "$old_model" >"$CLAUDE_PROXY_BACKUP_FILE"
+    fi
+    # Set proxy env vars and switch model to a direct proxy catalog entry.
+    jq --arg base "$base" --arg token "$token" --arg model "$PROXY_CLI_MODEL" \
+      '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_AUTH_TOKEN = $token | .model = $model' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
   else
-    jq 'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN)) else . end' \
+    # Restore native model from backup (default to NATIVE_CLI_MODEL if backup missing).
+    local native_model
+    native_model="$(jq -r '.native_model // empty' "$CLAUDE_PROXY_BACKUP_FILE" 2>/dev/null)"
+    [ -z "$native_model" ] && native_model="$NATIVE_CLI_MODEL"
+    jq --arg m "$native_model" \
+      'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN)) else . end | .model = $m' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
   fi
 }

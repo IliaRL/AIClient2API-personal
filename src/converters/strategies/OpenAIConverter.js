@@ -15,7 +15,8 @@ import {
     extractThinkingFromOpenAIText,
     mapFinishReason,
     cleanJsonSchemaProperties as cleanJsonSchema,
-    flattenToolArguments,
+    dynamicFlattenToolArguments,
+    toolStateManager,
     CLAUDE_DEFAULT_MAX_TOKENS,
     CLAUDE_DEFAULT_TEMPERATURE,
     CLAUDE_DEFAULT_TOP_P,
@@ -23,7 +24,8 @@ import {
     GEMINI_DEFAULT_TEMPERATURE,
     GEMINI_DEFAULT_TOP_P,
     OPENAI_DEFAULT_INPUT_TOKEN_LIMIT,
-    OPENAI_DEFAULT_OUTPUT_TOKEN_LIMIT
+    OPENAI_DEFAULT_OUTPUT_TOKEN_LIMIT,
+    getModelMaxOutputTokens
 } from '../utils.js';
 import { MODEL_PROTOCOL_PREFIX } from '../../utils/common.js';
 import {
@@ -187,8 +189,8 @@ export class OpenAIConverter extends BaseConverter {
                 const toolUseBlocks = calls.map(tc => {
                     let funcArgs = safeParseJSON(tc.function.arguments);
 
-                    // [Schema Guard] Flatten arguments
-                    funcArgs = flattenToolArguments(tc.function.name, funcArgs);
+                    // [Schema Guard] Flatten arguments dynamically
+                    funcArgs = dynamicFlattenToolArguments(tc.function.name, funcArgs);
 
                     return {
                         type: 'tool_use',
@@ -329,17 +331,25 @@ export class OpenAIConverter extends BaseConverter {
             claudeRequest.tools = openaiRequest.tools
                 .filter(t => t && ((t.function && t.function.name) || t.name))
                 .map(t => {
+                    const toolName = t.function?.name || t.name;
+                    const inputSchema = t.function?.parameters || t.input_schema || { type: 'object', properties: {} };
+
+                    // [Schema Guard] Store tool schema for response flattening
+                    if (toolName) {
+                        toolStateManager.storeToolSchema(toolName, inputSchema);
+                    }
+
                     if (t.function) {
                         return {
                             name: t.function.name,
                             description: t.function.description || '',
-                            input_schema: t.function.parameters || { type: 'object', properties: {} }
+                            input_schema: inputSchema
                         };
                     }
                     return {
                         name: t.name,
                         description: t.description || '',
-                        input_schema: t.input_schema || { type: 'object', properties: {} }
+                        input_schema: inputSchema
                     };
                 });
             if (claudeRequest.tools.length > 0) {
@@ -415,7 +425,7 @@ export class OpenAIConverter extends BaseConverter {
                     type: "tool_use",
                     id: toolCall.id || "",
                     name: func.name || "",
-                    input: argObj,
+                    input: dynamicFlattenToolArguments(func.name, argObj),
                 });
             }
         }
@@ -1100,8 +1110,16 @@ export class OpenAIConverter extends BaseConverter {
                 
                 if (t.type === 'function' && t.function) {
                     const func = t.function;
+                    const toolName = String(func.name || '');
+                    const inputSchema = func.parameters || { type: 'object', properties: {} };
+
+                    // [Schema Guard] Store tool schema for response flattening
+                    if (toolName) {
+                        toolStateManager.storeToolSchema(toolName, inputSchema);
+                    }
+
                     let fnDecl = {
-                        name: String(func.name || ''),
+                        name: toolName,
                         description: String(func.description || '')
                     };
 
@@ -1117,10 +1135,16 @@ export class OpenAIConverter extends BaseConverter {
 
                     functionDeclarations.push(fnDecl);
                 } else if (t.name) {
+                    const toolName = String(t.name);
+                    const inputSchema = t.input_schema || { type: 'object', properties: {} };
+
+                    // [Schema Guard] Store tool schema
+                    toolStateManager.storeToolSchema(toolName, inputSchema);
+
                     functionDeclarations.push({
-                        name: String(t.name),
+                        name: toolName,
                         description: String(t.description || ''),
-                        parametersJsonSchema: cleanJsonSchema(t.input_schema || { type: 'object', properties: {} })
+                        parametersJsonSchema: cleanJsonSchema(inputSchema)
                     });
                 }
                 
@@ -1304,7 +1328,7 @@ export class OpenAIConverter extends BaseConverter {
     buildGeminiGenerationConfig({ temperature, max_tokens, top_p, stop, tools, response_format }, model) {
         const config = {};
         config.temperature = checkAndAssignOrDefault(temperature, GEMINI_DEFAULT_TEMPERATURE);
-        config.maxOutputTokens = checkAndAssignOrDefault(max_tokens, GEMINI_DEFAULT_MAX_TOKENS);
+        config.maxOutputTokens = checkAndAssignOrDefault(max_tokens, getModelMaxOutputTokens(model, GEMINI_DEFAULT_MAX_TOKENS));
         config.topP = checkAndAssignOrDefault(top_p, GEMINI_DEFAULT_TOP_P);
         if (stop !== undefined) config.stopSequences = Array.isArray(stop) ? stop : [stop];
 
@@ -1356,9 +1380,12 @@ export class OpenAIConverter extends BaseConverter {
                     parts.push({
                         functionCall: {
                             name: toolCall.function.name,
-                            args: typeof toolCall.function.arguments === 'string'
-                                ? JSON.parse(toolCall.function.arguments)
-                                : toolCall.function.arguments
+                            args: dynamicFlattenToolArguments(
+                                toolCall.function.name,
+                                typeof toolCall.function.arguments === 'string'
+                                    ? JSON.parse(toolCall.function.arguments)
+                                    : toolCall.function.arguments
+                            )
                         }
                     });
                 }

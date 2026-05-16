@@ -271,8 +271,10 @@ function geminiToAntigravity(modelName, payload, projectId) {
 
     // 以前这里会针对 Claude 模型删除 tools，现在为了支持工具调用已移除该限制
 
-    // 对于非 Claude 模型，删除 maxOutputTokens
-    // Claude 模型需要保留 maxOutputTokens
+    // Antigravity's Gemini endpoint does not accept maxOutputTokens in generationConfig for
+    // non-Claude models — sending it causes the model to return empty content. Claude models
+    // must keep it (they use a different API path). Per-model defaults are injected earlier
+    // in the converter layer (OpenAIConverter.buildGeminiGenerationConfig).
     if (!isClaudeModel) {
         if (template.request.generationConfig && template.request.generationConfig.maxOutputTokens) {
             delete template.request.generationConfig.maxOutputTokens;

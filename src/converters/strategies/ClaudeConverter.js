@@ -10,12 +10,14 @@ import {
     checkAndAssignOrDefault,
     cleanJsonSchemaForOpenAI,
     determineReasoningEffortFromBudget,
-    flattenToolArguments,
+    dynamicFlattenToolArguments,
+    toolStateManager,
     GEMINI_DEFAULT_INPUT_TOKEN_LIMIT,
     GEMINI_DEFAULT_OUTPUT_TOKEN_LIMIT,
     OPENAI_DEFAULT_MAX_TOKENS,
     OPENAI_DEFAULT_TEMPERATURE,
-    OPENAI_DEFAULT_TOP_P
+    OPENAI_DEFAULT_TOP_P,
+    getModelMaxOutputTokens
 } from '../utils.js';
 import {MODEL_PROTOCOL_PREFIX} from '../../utils/common.js';
 import {
@@ -54,7 +56,7 @@ export class ClaudeConverter extends BaseConverter {
             case MODEL_PROTOCOL_PREFIX.NVIDIA:
             case MODEL_PROTOCOL_PREFIX.GITHUB:
                 // NVIDIA NIM and GitHub Models both speak the OpenAI Chat Completions wire format.
-                return this.toOpenAIRequest(data);
+                return this.toOpenAIRequest(data, targetProtocol);
             case MODEL_PROTOCOL_PREFIX.GEMINI:
                 return this.toGeminiRequest(data);
             case MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES:
@@ -129,7 +131,7 @@ export class ClaudeConverter extends BaseConverter {
     /**
      * Claude请求 -> OpenAI请求
      */
-    toOpenAIRequest(claudeRequest) {
+    toOpenAIRequest(claudeRequest, targetProtocol) {
         const openaiMessages = [];
         let systemMessageContent = '';
 
@@ -199,8 +201,8 @@ export class ClaudeConverter extends BaseConverter {
                         const funcName = toolUsePart.name || "";
                         let funcArgs = toolUsePart.input || {};
 
-                        // [Schema Guard] Flatten arguments
-                        funcArgs = flattenToolArguments(funcName, funcArgs);
+                        // [Schema Guard] Flatten arguments dynamically
+                        funcArgs = dynamicFlattenToolArguments(funcName, funcArgs);
 
                         const toolCallMsg = {
                             role: "assistant",
@@ -274,7 +276,7 @@ export class ClaudeConverter extends BaseConverter {
         const openaiRequest = {
             model: claudeRequest.model,
             messages: openaiMessages,
-            max_tokens: checkAndAssignOrDefault(claudeRequest.max_tokens, OPENAI_DEFAULT_MAX_TOKENS),
+            max_tokens: checkAndAssignOrDefault(claudeRequest.max_tokens, getModelMaxOutputTokens(claudeRequest.model, OPENAI_DEFAULT_MAX_TOKENS)),
             temperature: checkAndAssignOrDefault(claudeRequest.temperature, OPENAI_DEFAULT_TEMPERATURE),
             top_p: checkAndAssignOrDefault(claudeRequest.top_p, OPENAI_DEFAULT_TOP_P),
             stream: claudeRequest.stream,
@@ -284,14 +286,26 @@ export class ClaudeConverter extends BaseConverter {
         if (claudeRequest.tools) {
             const openaiTools = [];
             for (const tool of claudeRequest.tools) {
-                openaiTools.push({
+                // [Schema Guard] Store tool schema for response flattening
+                if (tool.name && tool.input_schema) {
+                    toolStateManager.storeToolSchema(tool.name, tool.input_schema);
+                }
+
+                const convertedTool = {
                     type: "function",
                     function: {
                         name: tool.name || "",
                         description: tool.description || "",
                         parameters: cleanJsonSchemaForOpenAI(tool.input_schema || {})
                     }
-                });
+                };
+
+                // [Schema Guard] Enable strict mode for NVIDIA and GitHub protocols
+                if (targetProtocol === MODEL_PROTOCOL_PREFIX.NVIDIA || targetProtocol === MODEL_PROTOCOL_PREFIX.GITHUB) {
+                    convertedTool.strict = true;
+                }
+
+                openaiTools.push(convertedTool);
             }
             openaiRequest.tools = openaiTools;
             openaiRequest.tool_choice = "auto";
@@ -414,7 +428,7 @@ export class ClaudeConverter extends BaseConverter {
                         type: "function",
                         function: {
                             name: block.name || '',
-                            arguments: JSON.stringify(block.input || {})
+                            arguments: JSON.stringify(dynamicFlattenToolArguments(block.name, block.input || {}))
                         }
                     });
                 }
@@ -1275,7 +1289,7 @@ export class ClaudeConverter extends BaseConverter {
                     const functionCallPart = {
                         functionCall: {
                             name: block.name,
-                            args: block.input || {}
+                            args: dynamicFlattenToolArguments(block.name, block.input || {})
                         }
                     };
                     // 添加 id（如果存在）
