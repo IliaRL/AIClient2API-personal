@@ -25,3 +25,5 @@ model-usage-stats.json
 master_creds.json
 .DS_Store
 AGENTS.md
+src/plugins-user/
+
