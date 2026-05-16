@@ -50,6 +50,8 @@ export const MODEL_PROTOCOL_PREFIX = {
     CODEX: 'codex',
     FORWARD: 'forward',
     GROK: 'grok',
+    NVIDIA: 'nvidia',
+    GITHUB: 'github',
 };
 
 // 提供商标识符常量
@@ -65,6 +67,8 @@ export const MODEL_PROVIDER = {
     CODEX_API: 'openai-codex-oauth',
     FORWARD_API: 'forward-api',
     GROK_WEB: 'grok-web',
+    NVIDIA_NIM: 'nvidia-nim',
+    GITHUB_MODELS: 'github-models',
     AUTO: 'auto',
 };
 

@@ -52,7 +52,7 @@ export const PROVIDER_MAPPINGS = [
         patterns: ['configs/antigravity/', '/antigravity/', '/.antigravity/'],
         providerType: 'gemini-antigravity',
         credPathKey: 'ANTIGRAVITY_OAUTH_CREDS_FILE_PATH',
-        defaultCheckModel: 'gemini-2.5-computer-use-preview-10-2025',
+        defaultCheckModel: 'gemini-3-flash',
         displayName: 'Gemini Antigravity',
         needsProjectId: true,
         urlKeys: ['ANTIGRAVITY_BASE_URL_DAILY', 'ANTIGRAVITY_BASE_URL_AUTOPUSH']
@@ -89,6 +89,28 @@ export const PROVIDER_MAPPINGS = [
         displayName: 'Grok Web',
         needsProjectId: false,
         urlKeys: ['GROK_BASE_URL', 'GROK_CF_CLEARANCE', 'GROK_USER_AGENT']
+    },
+    {
+        // NVIDIA NIM 配置
+        dirName: 'nvidia',
+        patterns: ['nvidia'],
+        providerType: 'nvidia-nim',
+        credPathKey: 'OPENAI_API_KEY',
+        defaultCheckModel: 'meta/llama-3.3-70b-instruct',
+        displayName: 'NVIDIA NIM',
+        needsProjectId: false,
+        urlKeys: ['OPENAI_BASE_URL']
+    },
+    {
+        // GitHub Models 配置
+        dirName: 'github',
+        patterns: ['github'],
+        providerType: 'github-models',
+        credPathKey: 'OPENAI_API_KEY',
+        defaultCheckModel: 'gpt-4o-mini',
+        displayName: 'GitHub Models',
+        needsProjectId: false,
+        urlKeys: ['OPENAI_BASE_URL']
     }
 ];
 

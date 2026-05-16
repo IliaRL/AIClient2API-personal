@@ -15,6 +15,7 @@ import {
     extractThinkingFromOpenAIText,
     mapFinishReason,
     cleanJsonSchemaProperties as cleanJsonSchema,
+    flattenToolArguments,
     CLAUDE_DEFAULT_MAX_TOKENS,
     CLAUDE_DEFAULT_TEMPERATURE,
     CLAUDE_DEFAULT_TOP_P,
@@ -62,6 +63,11 @@ export class OpenAIConverter extends BaseConverter {
                 return this.toCodexRequest(data);
             case MODEL_PROTOCOL_PREFIX.GROK:
                 return this.toGrokRequest(data);
+            case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
+                // OpenAI -> OpenAI / NVIDIA NIM / GitHub Models: identity, all speak the same wire format.
+                return data;
             default:
                 throw new Error(`Unsupported target protocol: ${targetProtocol}`);
         }
@@ -82,6 +88,11 @@ export class OpenAIConverter extends BaseConverter {
                 return this.toOpenAIResponsesResponse(data, model);
             case MODEL_PROTOCOL_PREFIX.GROK:
                 return this.toGrokResponse(data, model);
+            case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
+                // OpenAI -> OpenAI / NVIDIA NIM / GitHub Models: identity, all speak the same wire format.
+                return data;
             default:
                 throw new Error(`Unsupported target protocol: ${targetProtocol}`);
         }
@@ -100,6 +111,11 @@ export class OpenAIConverter extends BaseConverter {
                 return this.toOpenAIResponsesStreamChunk(chunk, model);
             case MODEL_PROTOCOL_PREFIX.GROK:
                 return this.toGrokStreamChunk(chunk, model);
+            case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
+                // OpenAI -> OpenAI / NVIDIA NIM / GitHub Models: identity, all speak the same wire format.
+                return chunk;
             default:
                 throw new Error(`Unsupported target protocol: ${targetProtocol}`);
         }
@@ -168,12 +184,19 @@ export class OpenAIConverter extends BaseConverter {
             } else if (message.role === 'assistant' && (message.tool_calls?.length || message.function_calls?.length)) {
                 // 助手工具调用消息 - 支持tool_calls和function_calls
                 const calls = message.tool_calls || message.function_calls || [];
-                const toolUseBlocks = calls.map(tc => ({
-                    type: 'tool_use',
-                    id: tc.id,
-                    name: tc.function.name,
-                    input: safeParseJSON(tc.function.arguments)
-                }));
+                const toolUseBlocks = calls.map(tc => {
+                    let funcArgs = safeParseJSON(tc.function.arguments);
+
+                    // [Schema Guard] Flatten arguments
+                    funcArgs = flattenToolArguments(tc.function.name, funcArgs);
+
+                    return {
+                        type: 'tool_use',
+                        id: tc.id,
+                        name: tc.function.name,
+                        input: funcArgs
+                    };
+                });
                 claudeMessages.push({ role: 'assistant', content: toolUseBlocks });
             } else {
                 // 普通消息
@@ -461,71 +484,72 @@ export class OpenAIConverter extends BaseConverter {
             const finishReason = choice.finish_reason;
             const events = [];
 
-            // 注释部分是为了兼容claude code，但是不兼容cherry studio
-            // 1. 处理 role (对应 message_start) 
-            // if (delta?.role === "assistant") {
-            //     events.push({
-            //         type: "message_start",
-            //         message: {
-            //             id: openaiChunk.id || `msg_${uuidv4()}`,
-            //             type: "message",
-            //             role: "assistant",
-            //             content: [],
-            //             model: model || openaiChunk.model || "unknown",
-            //             stop_reason: null,
-            //             stop_sequence: null,
-            //             usage: {
-            //                 input_tokens: openaiChunk.usage?.prompt_tokens || 0,
-            //                 output_tokens: 0
-            //             }
-            //         }
-            //     });
-            //     events.push({
-            //         type: "content_block_start",
-            //         index: 0,
-            //         content_block: {
-            //             type: "text",
-            //             text: ""
-            //         }
-            //     });
-            // }
+            // 1. 处理 role (对应 message_start)
+            if (delta?.role === "assistant") {
+                events.push({
+                    type: "message_start",
+                    message: {
+                        id: openaiChunk.id || `msg_${uuidv4()}`,
+                        type: "message",
+                        role: "assistant",
+                        content: [],
+                        model: model || openaiChunk.model || "unknown",
+                        stop_reason: null,
+                        stop_sequence: null,
+                        usage: {
+                            input_tokens: openaiChunk.usage?.prompt_tokens || 0,
+                            output_tokens: 0
+                        }
+                    }
+                });
+                // Only open a text block if this chunk isn't starting with tool_calls;
+                // tool_calls handling below opens its own content_block_start at the tool's index.
+                if (!delta?.tool_calls?.length) {
+                    events.push({
+                        type: "content_block_start",
+                        index: 0,
+                        content_block: {
+                            type: "text",
+                            text: ""
+                        }
+                    });
+                }
+            }
 
             // 2. 处理 tool_calls (对应 content_block_start 和 content_block_delta)
-            // if (delta?.tool_calls) {
-            //     const toolCalls = delta.tool_calls;
-            //     for (const toolCall of toolCalls) {
-            //         // 如果有 function.name，说明是工具调用开始
-            //         if (toolCall.function?.name) {
-            //             events.push({
-            //                 type: "content_block_start",
-            //                 index: toolCall.index || 0,
-            //                 content_block: {
-            //                     type: "tool_use",
-            //                     id: toolCall.id || `tool_${uuidv4()}`,
-            //                     name: toolCall.function.name,
-            //                     input: {}
-            //                 }
-            //             });
-            //         }
+            if (delta?.tool_calls) {
+                const toolCalls = delta.tool_calls;
+                for (const toolCall of toolCalls) {
+                    // 如果有 function.name，说明是工具调用开始
+                    if (toolCall.function?.name) {
+                        events.push({
+                            type: "content_block_start",
+                            index: toolCall.index || 0,
+                            content_block: {
+                                type: "tool_use",
+                                id: toolCall.id || `tool_${uuidv4()}`,
+                                name: toolCall.function.name,
+                                input: {}
+                            }
+                        });
+                    }
 
-            //         // 如果有 function.arguments，说明是参数增量
-            //         if (toolCall.function?.arguments) {
-            //             events.push({
-            //                 type: "content_block_delta",
-            //                 index: toolCall.index || 0,
-            //                 delta: {
-            //                     type: "input_json_delta",
-            //                     partial_json: toolCall.function.arguments
-            //                 }
-            //             });
-            //         }
-            //     }
-            // }
+                    // 如果有 function.arguments，说明是参数增量
+                    if (toolCall.function?.arguments) {
+                        events.push({
+                            type: "content_block_delta",
+                            index: toolCall.index || 0,
+                            delta: {
+                                type: "input_json_delta",
+                                partial_json: toolCall.function.arguments
+                            }
+                        });
+                    }
+                }
+            }
 
             // 3. 处理 reasoning_content (对应 thinking 类型的 content_block)
             if (delta?.reasoning_content) {
-                // 注意：这里可能需要先发送 content_block_start，但由于状态管理复杂，
-                // 我们假设调用方会处理这个逻辑
                 events.push({
                     type: "content_block_delta",
                     index: 0,
@@ -550,10 +574,7 @@ export class OpenAIConverter extends BaseConverter {
 
             // 5. 处理 finish_reason (对应 message_delta 和 message_stop)
             if (finishReason) {
-                // 映射 finish_reason
-                const stopReason = finishReason === "stop" ? "end_turn" :
-                    finishReason === "length" ? "max_tokens" :
-                        "end_turn";
+                const stopReason = mapFinishReason(finishReason, 'openai', 'anthropic');
 
                 events.push({
                     type: "content_block_stop",
@@ -1031,36 +1052,6 @@ export class OpenAIConverter extends BaseConverter {
                     // 使用 thinkingBudget 的模型
                     geminiRequest.generationConfig = geminiRequest.generationConfig || {};
                     geminiRequest.generationConfig.thinkingConfig = this.applyReasoningEffortToGemini(effort);
-                }
-            }
-        }
-
-        // 处理 extra_body.google.thinking_config（Cherry Studio 扩展）
-        if (!openaiRequest.reasoning_effort && openaiRequest.extra_body?.google?.thinking_config) {
-            const tc = openaiRequest.extra_body.google.thinking_config;
-            if (this.modelSupportsThinking(model) && !this.modelUsesThinkingLevels(model)) {
-                geminiRequest.generationConfig = geminiRequest.generationConfig || {};
-                geminiRequest.generationConfig.thinkingConfig = geminiRequest.generationConfig.thinkingConfig || {};
-                
-                let setBudget = false;
-                let budget = 0;
-                
-                if (tc.thinkingBudget !== undefined) {
-                    budget = parseInt(tc.thinkingBudget, 10);
-                    geminiRequest.generationConfig.thinkingConfig.thinkingBudget = budget;
-                    setBudget = true;
-                } else if (tc.thinking_budget !== undefined) {
-                    budget = parseInt(tc.thinking_budget, 10);
-                    geminiRequest.generationConfig.thinkingConfig.thinkingBudget = budget;
-                    setBudget = true;
-                }
-                
-                if (tc.includeThoughts !== undefined) {
-                    geminiRequest.generationConfig.thinkingConfig.includeThoughts = tc.includeThoughts;
-                } else if (tc.include_thoughts !== undefined) {
-                    geminiRequest.generationConfig.thinkingConfig.includeThoughts = tc.include_thoughts;
-                } else if (setBudget && budget !== 0) {
-                    geminiRequest.generationConfig.thinkingConfig.includeThoughts = true;
                 }
             }
         }

@@ -27,7 +27,7 @@ export const OPENAI_DEFAULT_OUTPUT_TOKEN_LIMIT = 128000;
 // =============================================================================
 // Claude 相关常量
 // =============================================================================
-export const CLAUDE_DEFAULT_MAX_TOKENS = 200000;
+export const CLAUDE_DEFAULT_MAX_TOKENS = 1000000;
 export const CLAUDE_DEFAULT_TEMPERATURE = 1;
 export const CLAUDE_DEFAULT_TOP_P = 0.95;
 
@@ -37,7 +37,7 @@ export const CLAUDE_DEFAULT_TOP_P = 0.95;
 export const GEMINI_DEFAULT_MAX_TOKENS = 65534;
 export const GEMINI_DEFAULT_TEMPERATURE = 1;
 export const GEMINI_DEFAULT_TOP_P = 0.95;
-export const GEMINI_DEFAULT_INPUT_TOKEN_LIMIT = 32768;
+export const GEMINI_DEFAULT_INPUT_TOKEN_LIMIT = 1000000;
 export const GEMINI_DEFAULT_OUTPUT_TOKEN_LIMIT = 65534;
 
 // =============================================================================
@@ -501,3 +501,26 @@ class ToolStateManager {
 }
 
 export const toolStateManager = new ToolStateManager();
+
+// Tools where top-level string fields may arrive as objects from non-Claude models.
+// Using a Set for O(1) lookup on the per-tool-call hot path.
+const SCHEMA_GUARD_TOOLS = new Set(['Skill', 'Agent', 'Bash', 'mcp__ide__executeCode']);
+const SCHEMA_GUARD_FIELDS = ['args', 'prompt', 'command', 'code'];
+
+/**
+ * Flattens object-valued arguments to JSON strings for tools that expect string inputs.
+ * Prevents "invalid tool parameters" errors when non-Claude models return nested objects.
+ */
+export function flattenToolArguments(toolName, input) {
+    if (!input || typeof input !== 'object') return input;
+    if (!SCHEMA_GUARD_TOOLS.has(toolName)) return input;
+
+    const flattened = { ...input };
+    for (const field of SCHEMA_GUARD_FIELDS) {
+        if (flattened[field] && typeof flattened[field] === 'object') {
+            logger.info(`[Schema Guard] Flattening ${field} for tool ${toolName}`);
+            flattened[field] = JSON.stringify(flattened[field]);
+        }
+    }
+    return flattened;
+}

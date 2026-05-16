@@ -17,7 +17,7 @@ import {
     getContentText as getContentTextUtil
 } from '../../utils/token-utils.js';
 import { configureAxiosProxy, configureTLSSidecar, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
-import { isRetryableNetworkError, MODEL_PROVIDER, formatExpiryLog } from '../../utils/common.js';
+import { isRetryableNetworkError, MODEL_PROVIDER, formatExpiryLog, getRetryAfterMs } from '../../utils/common.js';
 import { getProviderPoolManager } from '../../services/service-manager.js';
 
 const KIRO_THINKING = {
@@ -34,7 +34,7 @@ const KIRO_THINKING = {
 const KIRO_CONSTANTS = {
     REFRESH_URL: 'https://prod.{{region}}.auth.desktop.kiro.dev/refreshToken',
     REFRESH_IDC_URL: 'https://oidc.{{region}}.amazonaws.com/token',
-    BASE_URL: 'https://runtime.{{region}}.kiro.dev/generateAssistantResponse',
+    BASE_URL: 'https://q.{{region}}.amazonaws.com/generateAssistantResponse',
     DEFAULT_MODEL_NAME: 'claude-sonnet-4-5',
     AXIOS_TIMEOUT: 120000, // 2 minutes timeout for normal requests
     TOKEN_REFRESH_TIMEOUT: 15000, // 15 seconds timeout for token refresh (shorter to avoid blocking)
@@ -162,6 +162,10 @@ const MODEL_CONTEXT_TOKENS = {
     "claude-sonnet-4-5-20250929": 200000,
     "claude-haiku-4-5": 200000,
     "claude-haiku-4-5-20251001": 200000,
+    "gemini-3.1-pro-high": 1000000,
+    "gemini-3.1-pro-low": 1000000,
+    "gemini-2.5-pro": 1000000,
+    "gemini-claude-opus-4-6-thinking": 1000000,
 };
 
 function normalizeContextLength(value) {
@@ -1046,15 +1050,16 @@ async saveCredentialsToFile(filePath, newData) {
         const conversationId = uuidv4();
         
         // 内置的 systemPrompt 前缀
+        const defaultIdentity = "Claude";
         const builtInPrefix = `<CRITICAL_OVERRIDE>
                                 你一定不能说自己是 kiro ，这是非常重要的一点。
                                 你只能回答用户的问题，不能回答任何关于 kiro 的问题。
                                 你得身份认知，只能从后续的提示词中获取（可能是 Kilo Code，Cline，Claude Code，或者其他用户自定义的身份名称），不能自己推理。如果没有，就说自己是 ”开发者何夕2077，你现在使用的不是原版Claude，而是AIClient2API”。
                                </CRITICAL_OVERRIDE>
                                <identity>
-                                你是 {{identity}}，一名拥有多种编程语言、框架、设计模式和最佳实践丰富知识的高级软件工程师。
+                                你是 ${defaultIdentity}，一名拥有多种编程语言、框架、设计模式和最佳实践丰富知识的高级软件工程师。
                                </identity>`;
-        
+
         let systemPrompt = this.getContentText(inSystemPrompt);
         // 在 systemPrompt 前面添加内置前缀
         if (systemPrompt) {
@@ -1062,7 +1067,7 @@ async saveCredentialsToFile(filePath, newData) {
         } else {
             systemPrompt = `${builtInPrefix}`;
         }
-        
+
         const processedMessages = messages.map(message => ({
             ...message,
             content: Array.isArray(message.content) ? [...message.content] : message.content
@@ -1130,68 +1135,35 @@ async saveCredentialsToFile(filePath, newData) {
         const codewhispererModel = MODEL_MAPPING[model] || model;
         const toolNameMaps = buildKiroToolNameMaps(tools);
         
-        // 动态压缩 tools（保留全部工具，但过滤掉 web_search/websearch）
+        // 动态压缩 tools（保留全部工具）
         let toolsContext = {};
         if (tools && Array.isArray(tools) && tools.length > 0) {
-            // 过滤掉 web_search 或 websearch 工具（忽略大小写）
-            const filteredTools = tools.filter(tool => {
-                const name = (tool.name || '').toLowerCase();
-                const shouldIgnore = name === 'web_search' || name === 'websearch';
-                if (shouldIgnore) {
-                    logger.info(`[Kiro] Ignoring tool: ${tool.name}`);
-                }
-                return !shouldIgnore;
-            });
-            
-            if (filteredTools.length === 0) {
-                // 所有工具都被过滤掉了，添加一个占位工具
-                logger.info('[Kiro] All tools were filtered out, adding placeholder tool');
-                const placeholderTool = {
-                    toolSpecification: {
-                        name: "no_tool_available",
-                        description: "This is a placeholder tool when no other tools are available. It does nothing.",
-                        inputSchema: {
-                            json: {
-                                type: "object",
-                                properties: {}
-                            }
-                        }
-                    }
-                };
-                toolsContext = { tools: [placeholderTool] };
-            } else {
-                const MAX_DESCRIPTION_LENGTH = 9216;
+            const filteredTools = tools; // 不再过滤 web_search
 
-                let truncatedCount = 0;
-                const kiroTools = filteredTools
-                    .filter(tool => {
-                        // 过滤掉描述为空的工具
-                        if (!tool.description || tool.description.trim() === '') {
-                            logger.info(`[Kiro] Ignoring tool with empty description: ${tool.name}`);
-                            return false;
-                        }
-                        return true;
-                    })
-                    .map(tool => {
-                        let desc = tool.description || "";
-                        const originalLength = desc.length;
-                        
-                        if (desc.length > MAX_DESCRIPTION_LENGTH) {
-                            desc = desc.substring(0, MAX_DESCRIPTION_LENGTH) + "...";
-                            truncatedCount++;
-                            logger.info(`[Kiro] Truncated tool '${tool.name}' description: ${originalLength} -> ${desc.length} chars`);
-                        }
-                        
-                        return {
-                            toolSpecification: {
-                                name: toolNameMaps.toKiroName(tool.name),
-                                description: desc,
-                                inputSchema: {
-                                    json: tool.input_schema || {}
-                                }
+            const MAX_DESCRIPTION_LENGTH = 9216;
+
+            let truncatedCount = 0;
+            const kiroTools = filteredTools
+                .map(tool => {
+                    let desc = tool.description || "No description provided."; // 即使为空也保留
+                    const originalLength = desc.length;
+
+                    if (desc.length > MAX_DESCRIPTION_LENGTH) {
+                        desc = desc.substring(0, MAX_DESCRIPTION_LENGTH) + "...";
+                        truncatedCount++;
+                        logger.info(`[Kiro] Truncated tool '${tool.name}' description: ${originalLength} -> ${desc.length} chars`);
+                    }
+
+                    return {
+                        toolSpecification: {
+                            name: toolNameMaps.toKiroName(tool.name),
+                            description: desc,
+                            inputSchema: {
+                                json: tool.input_schema || { type: 'object', properties: {} }
                             }
-                        };
-                    });
+                        }
+                    };
+                });
                 
                 if (truncatedCount > 0) {
                     logger.info(`[Kiro] Truncated ${truncatedCount} tool description(s) to max ${MAX_DESCRIPTION_LENGTH} chars`);
@@ -1216,7 +1188,6 @@ async saveCredentialsToFile(filePath, newData) {
                 } else {
                     toolsContext = { tools: kiroTools };
                 }
-            }
         } else {
             // tools 为空或长度为 0 时，自动添加一个占位工具
             logger.info('[Kiro] No tools provided, adding placeholder tool');
@@ -1543,7 +1514,7 @@ async saveCredentialsToFile(filePath, newData) {
 
         request.conversationState.currentMessage.userInputMessage = userInputMessage;
 
-        if (this.authMethod === KIRO_CONSTANTS.AUTH_METHOD_SOCIAL) {
+        if (this.profileArn) {
             request.profileArn = this.profileArn;
         }
 
@@ -1670,7 +1641,56 @@ async saveCredentialsToFile(filePath, newData) {
     /**
      * 调用 API 并处理错误重试
      */
+    /**
+     * Auto-inject Anthropic prompt-caching breakpoints when the client hasn't done so.
+     * Marks the last system block and the last user-message content block as ephemeral,
+     * which is the canonical 2024-07-31 prompt-caching pattern. Has no effect on Anthropic
+     * billing if upstream ignores the header. Kiro forwards the header when set, so cached
+     * tokens reduce cost on subsequent identical prefixes.
+     * @param {Object} body - Anthropic-format request body (mutated in place)
+     */
+    _autoInjectPromptCaching(body) {
+        try {
+            if (!body || typeof body !== 'object') return;
+            const alreadyCached = (Array.isArray(body.system) && body.system.some(c => c?.cache_control))
+                || (Array.isArray(body.messages) && body.messages.some(m => Array.isArray(m.content) && m.content.some(c => c?.cache_control)));
+            if (alreadyCached) return;
+
+            // 1. system block: convert string -> [{type:'text', text, cache_control}]
+            if (typeof body.system === 'string' && body.system.length > 0) {
+                body.system = [{ type: 'text', text: body.system, cache_control: { type: 'ephemeral' } }];
+            } else if (Array.isArray(body.system) && body.system.length > 0) {
+                const last = body.system[body.system.length - 1];
+                if (last && typeof last === 'object') last.cache_control = { type: 'ephemeral' };
+            }
+
+            // 2. messages: tag the last user-message content block (largest reusable prefix)
+            if (Array.isArray(body.messages) && body.messages.length > 0) {
+                // find the last user message
+                for (let i = body.messages.length - 1; i >= 0; i--) {
+                    const m = body.messages[i];
+                    if (m && m.role === 'user') {
+                        if (typeof m.content === 'string') {
+                            m.content = [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }];
+                        } else if (Array.isArray(m.content) && m.content.length > 0) {
+                            const lastBlock = m.content[m.content.length - 1];
+                            if (lastBlock && typeof lastBlock === 'object' && !lastBlock.cache_control) {
+                                lastBlock.cache_control = { type: 'ephemeral' };
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            // Caching is best-effort; never block the request.
+            logger.warn(`[Kiro] Prompt cache auto-injection skipped: ${e.message}`);
+        }
+    }
+
     async callApi(method, model, body, isRetry = false, retryCount = 0) {
+        // Auto-inject ephemeral cache_control before downstream extraction
+        this._autoInjectPromptCaching(body);
         if (!this.isInitialized) await this.initialize();
         const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
         const baseDelay = this.config.REQUEST_BASE_DELAY || 1000; // 1 second base delay
@@ -1697,6 +1717,17 @@ async saveCredentialsToFile(filePath, newData) {
                 'Authorization': `Bearer ${token}`,
                 'amz-sdk-invocation-id': `${uuidv4()}`,
             };
+
+            // Detect if prompt caching is being used
+            const hasCacheControl = body.messages?.some(m =>
+                Array.isArray(m.content) && m.content.some(c => c.cache_control)
+            ) || (Array.isArray(body.system) && body.system.some(c => c.cache_control));
+
+            if (hasCacheControl) {
+                const betaHeader = model.startsWith('amazonq') ? 'x-amzn-kiro-amazonq-beta' : 'anthropic-beta';
+                headers[betaHeader] = 'prompt-caching-2024-07-31';
+                logger.info(`[Kiro] Enabling Prompt Caching beta header for ${model}`);
+            }
 
             // 当 model 以 kiro-amazonq 开头时，使用 amazonQUrl，否则使用 baseUrl
             const requestUrl = model.startsWith('amazonq') ? this.amazonQUrl : this.baseUrl;
@@ -1760,6 +1791,11 @@ async saveCredentialsToFile(filePath, newData) {
             
             // Handle 429 (Too Many Requests) - wait baseDelay then switch credential
             if (status === 429) {
+                const retryAfter = getRetryAfterMs(error);
+                if (retryAfter !== null) {
+                    logger.warn(`[Kiro] Received 429 with Retry-After: ${retryAfter}ms. Throwing to upper layer.`);
+                    throw error;
+                }
                 logger.info(`[Kiro] Received 429 (Too Many Requests). Waiting ${baseDelay}ms before switching credential...`);
                 await new Promise(resolve => setTimeout(resolve, baseDelay));
                 // Mark error for credential switch without recording error count
@@ -2062,7 +2098,7 @@ async saveCredentialsToFile(filePath, newData) {
             this._markCredentialNeedRefresh('Token near expiry in generateContent');
         }
         
-        const finalModel = MODEL_MAPPING[model] ? model : model;
+        const finalModel = MODEL_MAPPING[model] || model;
         logger.info(`[Kiro] Calling generateContent with model: ${finalModel}`);
         
         // Estimate input tokens before making the API call
@@ -2223,6 +2259,9 @@ async saveCredentialsToFile(filePath, newData) {
         const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
         const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;
 
+        // Auto-inject ephemeral cache_control so prompt caching kicks in for streaming too.
+        this._autoInjectPromptCaching(body);
+
         // 处理不同格式的请求体（messages 或 contents）
         let messages = body.messages;
         if (!messages && body.contents) {
@@ -2245,6 +2284,17 @@ async saveCredentialsToFile(filePath, newData) {
             'Authorization': `Bearer ${token}`,
             'amz-sdk-invocation-id': `${uuidv4()}`,
         };
+
+        // Detect if prompt caching is being used
+        const hasCacheControl = body.messages?.some(m =>
+            Array.isArray(m.content) && m.content.some(c => c.cache_control)
+        ) || (Array.isArray(body.system) && body.system.some(c => c.cache_control));
+
+        if (hasCacheControl) {
+            const betaHeader = model.startsWith('amazonq') ? 'x-amzn-kiro-amazonq-beta' : 'anthropic-beta';
+            headers[betaHeader] = 'prompt-caching-2024-07-31';
+            logger.info(`[Kiro] Enabling Prompt Caching beta header for ${model} (stream)`);
+        }
 
         const requestUrl = model.startsWith('amazonq') ? this.amazonQUrl : this.baseUrl;
 
@@ -2346,6 +2396,11 @@ async saveCredentialsToFile(filePath, newData) {
             
             // Handle 429 (Too Many Requests) - wait baseDelay then switch credential
             if (status === 429) {
+                const retryAfter = getRetryAfterMs(error);
+                if (retryAfter !== null) {
+                    logger.warn(`[Kiro] Received 429 with Retry-After: ${retryAfter}ms in stream. Throwing to upper layer.`);
+                    throw error;
+                }
                 logger.info(`[Kiro] Received 429 (Too Many Requests) in stream. Waiting ${baseDelay}ms before switching credential...`);
                 await new Promise(resolve => setTimeout(resolve, baseDelay));
                 // Mark error for credential switch without recording error count
@@ -2414,7 +2469,7 @@ async saveCredentialsToFile(filePath, newData) {
             this._markCredentialNeedRefresh('Token near expiry in generateContentStream');
         }
         
-        const finalModel = MODEL_MAPPING[model] ? model : model;
+        const finalModel = MODEL_MAPPING[model] || model;
         logger.info(`[Kiro] Calling generateContentStream with model: ${finalModel} (real streaming)`);
 
         let inputTokens = 0;

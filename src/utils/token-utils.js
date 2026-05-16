@@ -1,5 +1,41 @@
 import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from './logger.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+
+let nativeTokenizer = null;
+try {
+    // Try to load the native addon from the build directory
+    const nativePath = path.resolve(__dirname, '../../build/native/aiclient-tokenizer.node');
+    nativeTokenizer = require(nativePath);
+    logger.info('[TokenUtils] Native Rust tokenizer loaded successfully');
+} catch (error) {
+    logger.warn('[TokenUtils] Native tokenizer not found, using JS fallback. Run "npm run build:native" to enable high-performance tokenization.');
+}
+
+/**
+ * Initialize a native tokenizer for a specific model type
+ * @param {string} modelType - 'claude', 'openai', 'gemini'
+ * @param {string} jsonPath - Path to the tokenizer JSON file
+ */
+export async function initNativeTokenizer(modelType, jsonPath) {
+    if (!nativeTokenizer || typeof nativeTokenizer.loadTokenizer !== 'function') {
+        return false;
+    }
+    try {
+        const fs = await import('fs/promises');
+        const jsonData = await fs.readFile(jsonPath, 'utf-8');
+        return nativeTokenizer.loadTokenizer(modelType, jsonData);
+    } catch (error) {
+        logger.error(`[TokenUtils] Failed to load tokenizer for ${modelType}:`, error.message);
+        return false;
+    }
+}
 
 /**
  * Extract text content from message format
@@ -57,15 +93,32 @@ export function processContent(content) {
 }
 
 /**
- * Count tokens for a given text using Claude's official tokenizer
+ * Count tokens for a given text using the fastest available method
+ * @param {string} text - text to tokenize
+ * @param {string} [modelType='claude'] - 'claude', 'openai', or 'gemini'
  */
-export function countTextTokens(text) {
+export function countTextTokens(text, modelType = 'claude') {
     if (!text) return 0;
+
+    // Use native Rust tokenizer if available (sub-50ms for 1M tokens)
+    if (nativeTokenizer && typeof nativeTokenizer.countTokens === 'function') {
+        try {
+            return nativeTokenizer.countTokens(text, modelType);
+        } catch (error) {
+            logger.warn('[TokenUtils] Native tokenizer failed, falling back:', error.message);
+        }
+    }
+
+    // Fallback to JS tokenizer or estimation
     try {
-        return countTokens(text);
+        if (modelType === 'claude') {
+            return countTokens(text);
+        }
+        // Basic estimation for other models in JS
+        return Math.ceil((text || '').length / 4);
     } catch (error) {
-        // Fallback to estimation if tokenizer fails
-        logger.warn('[TokenUtils] Tokenizer error, falling back to estimation:', error.message);
+        // Ultimate fallback
+        logger.warn('[TokenUtils] JS Tokenizer error, falling back to estimation:', error.message);
         return Math.ceil((text || '').length / 4);
     }
 }

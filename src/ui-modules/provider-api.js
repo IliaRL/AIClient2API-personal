@@ -125,8 +125,8 @@ async function persistProviderStatusToFile(currentConfig, providerPoolManager) {
     const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
     const providerPools = {};
 
-    for (const providerType in providerPoolManager.providerStatus) {
-        providerPools[providerType] = providerPoolManager.providerStatus[providerType].map(providerStatus => providerStatus.config);
+    for (const providerType in providerPoolManager.providerPools) {
+        providerPools[providerType] = providerPoolManager.providerPools[providerType];
     }
 
     await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
@@ -228,12 +228,15 @@ export async function handleGetProviders(req, res, currentConfig, providerPoolMa
     // 2. 从管理器获取当前所有池的状态
     const providerStatus = {};
     if (providerPoolManager) {
-        for (const [type, providers] of Object.entries(providerPoolManager.providerStatus)) {
-            providerStatus[type] = providers.map(p => ({
-                ...p.config,
-                activeRequests: p.state?.activeCount || 0,
-                waitingRequests: p.state?.waitingCount || 0
-            }));
+        for (const [type, providers] of Object.entries(providerPoolManager.providerPools)) {
+            providerStatus[type] = providers.map(p => {
+                const state = providerPoolManager.providerState?.get(p.uuid) || {};
+                return {
+                    ...p,
+                    activeRequests: state.activeCount || 0,
+                    waitingRequests: state.waitingCount || 0
+                };
+            });
         }
     }
     
@@ -856,24 +859,22 @@ async function _handleResetProviderHealth(req, res, currentConfig, providerPoolM
         }
 
         // 2. 执行重置逻辑
-        if (providerPoolManager && providerPoolManager.providerStatus[providerType]) {
+        if (providerPoolManager && providerPoolManager.providerPools[providerType]) {
             // 如果管理器存在，优先使用管理器的方法
-            const pool = providerPoolManager.providerStatus[providerType];
+            const pool = providerPoolManager.providerPools[providerType];
             totalCount = pool.length;
-            
-            pool.forEach(ps => {
-                if (!ps.config.isHealthy || ps.config.needsRefresh || (ps.config.errorCount && ps.config.errorCount > 0)) {
+
+            pool.forEach(p => {
+                if (!p.isHealthy || p.needsRefresh || (p.errorCount && p.errorCount > 0)) {
                     resetCount++;
                 }
             });
-            
-            // 重置内存状态
-            providerPoolManager.resetAllHealthInType(providerType);
-            
+
+            // 重置内存状态 — mark each provider healthy via the pool manager
+            pool.forEach(p => providerPoolManager.markProviderHealthy(providerType, p, true));
+
             // 从管理器获取最新的完整的池数据用于持久化
-            if (providerPoolManager.providerPools) {
-                providerPools = providerPoolManager.providerPools;
-            }
+            providerPools = providerPoolManager.providerPools;
         } else {
             // 如果管理器中没有，则只重置文件中的数据
             const providers = providerPools[providerType] || [];
@@ -1141,8 +1142,8 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
             return true;
         }
 
-        const providers = providerPoolManager.providerStatus[providerType] || [];
-        
+        const providers = providerPoolManager.providerPools[providerType] || [];
+
         if (providers.length === 0) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: { message: 'No providers found for this type' } }));
@@ -1150,8 +1151,8 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
         }
 
         // 只检测不健康的节点
-        const unhealthyProviders = providers.filter(ps => !ps.config.isHealthy);
-        
+        const unhealthyProviders = providers.filter(p => !p.isHealthy);
+
         if (unhealthyProviders.length === 0) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -1169,18 +1170,16 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
 
         // 执行健康检测（检查所有未禁用的 unhealthy providers）
         const results = [];
-        for (const providerStatus of unhealthyProviders) {
-            const providerConfig = providerStatus.config;
-            
+        for (const providerConfig of unhealthyProviders) {
             // 跳过已禁用的节点
             if (providerConfig.isDisabled) {
                 logger.info(`[UI API] Skipping health check for disabled provider: ${providerConfig.uuid}`);
                 continue;
             }
 
-             try {
+            try {
                 const healthResult = await providerPoolManager._checkProviderHealth(providerType, providerConfig);
-                
+
                 if (healthResult.success) {
                     providerPoolManager.markProviderHealthy(providerType, providerConfig, false, healthResult.modelName);
                     results.push({
@@ -1194,17 +1193,17 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
                     const errorMessage = healthResult.errorMessage || 'Check failed';
                     const isAuthError = /\b(401|403)\b/.test(errorMessage) ||
                                        /\b(Unauthorized|Forbidden|AccessDenied|InvalidToken|ExpiredToken)\b/i.test(errorMessage);
-                    
+
                     if (isAuthError) {
                         providerPoolManager.markProviderUnhealthyImmediately(providerType, providerConfig, errorMessage);
                         logger.info(`[UI API] Auth error detected for ${providerConfig.uuid}, immediately marked as unhealthy`);
                     } else {
                         providerPoolManager.markProviderUnhealthy(providerType, providerConfig, errorMessage);
                     }
-                    
-                    providerStatus.config.lastHealthCheckTime = new Date().toISOString();
+
+                    providerConfig.lastHealthCheckTime = new Date().toISOString();
                     if (healthResult.modelName) {
-                        providerStatus.config.lastHealthCheckModel = healthResult.modelName;
+                        providerConfig.lastHealthCheckModel = healthResult.modelName;
                     }
                     results.push({
                         uuid: providerConfig.uuid,
@@ -1255,7 +1254,7 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
             checkValidity();
 
             // 更新当前 providerType 的所有节点
-            currentPools[providerType] = providerPoolManager.providerStatus[providerType].map(ps => ps.config);
+            currentPools[providerType] = providerPoolManager.providerPools[providerType];
 
             await atomicWriteFile(filePath, JSON.stringify(currentPools, null, 2), 'utf-8');
         });
@@ -1304,10 +1303,10 @@ export async function handleSingleProviderHealthCheck(req, res, currentConfig, p
             return true;
         }
 
-        const providers = providerPoolManager.providerStatus[providerType] || [];
-        const providerStatus = providers.find(item => item.config?.uuid === providerUuid);
+        const providers = providerPoolManager.providerPools[providerType] || [];
+        const providerConfig = providers.find(item => item.uuid === providerUuid);
 
-        if (!providerStatus) {
+        if (!providerConfig) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: { message: 'Provider not found' } }));
             return true;
@@ -1315,7 +1314,7 @@ export async function handleSingleProviderHealthCheck(req, res, currentConfig, p
 
         logger.info(`[UI API] Starting single health check for provider ${providerUuid} in ${providerType}`);
 
-        const result = await runProviderHealthCheck(providerPoolManager, providerType, providerStatus);
+        const result = await runProviderHealthCheck(providerPoolManager, providerType, { config: providerConfig });
 
         // 使用文件锁进行持久化，防止并发写入冲突
         const poolFilePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';

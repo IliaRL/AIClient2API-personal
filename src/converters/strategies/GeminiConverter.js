@@ -170,6 +170,9 @@ export class GeminiConverter extends BaseConverter {
     convertRequest(data, targetProtocol) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
+                // NVIDIA NIM and GitHub Models speak OpenAI Chat Completions wire format.
                 return this.toOpenAIRequest(data);
             case MODEL_PROTOCOL_PREFIX.CLAUDE:
                 return this.toClaudeRequest(data);
@@ -190,6 +193,8 @@ export class GeminiConverter extends BaseConverter {
     convertResponse(data, targetProtocol, model) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
                 return this.toOpenAIResponse(data, model);
             case MODEL_PROTOCOL_PREFIX.CLAUDE:
                 return this.toClaudeResponse(data, model);
@@ -208,6 +213,8 @@ export class GeminiConverter extends BaseConverter {
     convertStreamChunk(chunk, targetProtocol, model) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
                 return this.toOpenAIStreamChunk(chunk, model);
             case MODEL_PROTOCOL_PREFIX.CLAUDE:
                 return this.toClaudeStreamChunk(chunk, model);

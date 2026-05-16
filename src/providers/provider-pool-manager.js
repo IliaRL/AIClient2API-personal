@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { getDb } from '../utils/db.js';
 import { getServiceAdapter, getRegisteredProviders, invalidateServiceAdapter } from './adapter.js';
 import logger from '../utils/logger.js';
 import { MODEL_PROVIDER, getProtocolPrefix } from '../utils/common.js';
@@ -48,14 +49,16 @@ export class ProviderPoolManager {
     // 默认健康检查模型配置
     // 键名必须与 MODEL_PROVIDER 常量值一致
     static DEFAULT_HEALTH_CHECK_MODELS = {
-        'gemini-cli-oauth': 'gemini-2.5-flash',
-        'gemini-antigravity': 'gemini-2.5-flash',
+        'gemini-cli-oauth': 'gemini-2.5-flash-lite',
+        'gemini-antigravity': 'gemini-3-flash',
         'openai-custom': 'gpt-4o-mini',
+        'nvidia-nim': 'meta/llama-3.3-70b-instruct',
+        'github-models': 'gpt-4o-mini',
         'claude-custom': 'claude-3-7-sonnet-20250219',
         'claude-kiro-oauth': 'claude-haiku-4-5',
         'openai-qwen-oauth': 'qwen3-coder-flash',
         'openai-iflow': 'qwen3-coder-plus',
-        'openai-codex-oauth': 'gpt-5-codex-mini',
+        'openai-codex-oauth': 'gpt-5.4',
         'openaiResponses-custom': 'gpt-4o-mini',
         'forward-api': 'gpt-4o-mini',
         'grok-web': 'grok-4.1-mini',
@@ -111,7 +114,17 @@ export class ProviderPoolManager {
         
         // 用于并发选点时的原子排序辅助（自增序列）
         this._selectionSequence = 0;
- 
+
+        // 模型临时冷却：当某个 providerType 在某模型上连续返回 400 时，临时把该模型从该提供商池排除
+        // Map<providerType, Map<modelName, expiryTimestampMs>>
+        this._modelCooldowns = new Map();
+        this.modelCooldownDurationMs = options.globalConfig?.MODEL_COOLDOWN_MS ?? 300000; // 5 分钟
+
+        // SQLite pool state — prepared statements cached after first init
+        this._db = null;
+        this._stmts = null;
+        this._initDb();
+
         this.initializeProviderStatus();
     }
 
@@ -833,12 +846,16 @@ export class ProviderPoolManager {
                     }
                     
                     // --- V2: 刷新监控字段 ---
+                    // needsRefresh is a user-visible signal that a credential needs
+                    // manual rotation. It must survive cold starts; otherwise the
+                    // proxy will keep retrying a known-dead token and exhaust the pool.
+                    // refreshCount is a counter and can be reset on cold start safely.
                     const persistedNeedsRefresh = providerConfig.needsRefresh !== undefined ? providerConfig.needsRefresh : false;
                     const persistedRefreshCount = providerConfig.refreshCount !== undefined ? providerConfig.refreshCount : 0;
-                    if (isColdStart && (persistedNeedsRefresh || persistedRefreshCount > 0)) {
-                        this._log('info', `Resetting stale refresh state for provider ${this._getDisplayName(providerConfig)} (${providerType}) on startup.`);
+                    if (isColdStart && persistedRefreshCount > 0) {
+                        this._log('info', `Resetting stale refreshCount for provider ${this._getDisplayName(providerConfig)} (${providerType}) on startup.`);
                     }
-                    providerConfig.needsRefresh = isColdStart ? false : persistedNeedsRefresh;
+                    providerConfig.needsRefresh = persistedNeedsRefresh;
                     providerConfig.refreshCount = isColdStart ? 0 : persistedRefreshCount;
                     
                     // 优化2: 简化 lastErrorTime 处理逻辑
@@ -870,6 +887,10 @@ export class ProviderPoolManager {
             // 确保初始化时的默认值补全也能写盘
             this._debouncedSave(providerType);
         }
+        // Overlay persisted health state and model cooldowns from SQLite.
+        // This makes health state and model cooldowns survive proxy restarts.
+        this._overlayHealthFromDb();
+
         this._log('info', `Initialized provider statuses: ok (maxErrorCount: ${this.maxErrorCount})`);
     }
 
@@ -1028,6 +1049,12 @@ export class ProviderPoolManager {
 
         // 如果指定了模型，则排除不支持该模型的提供商
         if (requestedModel) {
+            // 首先检查 providerType 是否对该 model 处于冷却中（最近 400 拒绝）
+            if (this.isModelOnCooldown(providerType, requestedModel)) {
+                this._log('warn', `Provider type ${providerType} is on model cooldown for model ${requestedModel}; skipping`);
+                return null;
+            }
+
             const modelFilteredProviders = availableAndHealthyProviders.filter(p => {
                 const supportedModels = getConfiguredSupportedModels(providerType, p.config);
                 if (supportedModels.length > 0) {
@@ -1098,12 +1125,13 @@ export class ProviderPoolManager {
 
         const triedTypes = new Set();
         const typesToTry = [providerType];
-        
+
         const fallbackTypes = this.fallbackChain[providerType] || [];
         if (Array.isArray(fallbackTypes)) {
             typesToTry.push(...fallbackTypes);
         }
 
+        // --- 策略 A: 遍历所有同协议提供商，尝试请求该模型 ---
         for (const currentType of typesToTry) {
             if (triedTypes.has(currentType)) continue;
             triedTypes.add(currentType);
@@ -1112,17 +1140,18 @@ export class ProviderPoolManager {
                 continue;
             }
 
+            // 检查模型兼容性 (仅对 Fallback 类型)
             if (currentType !== providerType && requestedModel) {
-                const primaryProtocol = getProtocolPrefix(providerType);
-                const fallbackProtocol = getProtocolPrefix(currentType);
-                if (primaryProtocol !== fallbackProtocol) continue;
-
                 const supportedModels = getProviderModels(currentType);
-                if (supportedModels.length > 0 && !supportedModels.includes(requestedModel)) continue;
+                // 如果该提供商明确不支持此模型，跳过
+                if (supportedModels.length > 0 && !supportedModels.includes(requestedModel)) {
+                    continue;
+                }
             }
 
-            // 尝试获取插槽
+            // 尝试从该提供商的所有可用账号中获取插槽
             try {
+                // acquireSlot 内部已经会尝试该 type 下的所有账号并返回评分最高的
                 const selectedConfig = await this.acquireSlot(currentType, requestedModel, options);
                 if (selectedConfig) {
                     if (currentType !== providerType) {
@@ -1131,68 +1160,87 @@ export class ProviderPoolManager {
                     return {
                         config: selectedConfig,
                         actualProviderType: currentType,
-                        isFallback: currentType !== providerType
+                        isFallback: currentType !== providerType,
+                        actualModel: requestedModel
                     };
                 }
             } catch (err) {
                 if (err.status === 429) {
-                    // 如果是因为 429 (并发/队列满)，尝试下一个 Fallback
-                    this._log('info', `Type ${currentType} busy (429), trying next fallback...`);
+                    // 该提供商所有账号都满了，尝试下一个
+                    this._log('info', `Type ${currentType} exhausted (429), trying next fallback...`);
                     continue;
                 }
-                throw err; // 其他错误抛出
+                throw err;
             }
         }
 
-        // Model Fallback Mapping
+        // --- 策略 B: 如果该模型在所有兼容提供商上都失效，则进入 Model Fallback Mapping ---
         if (requestedModel && this.modelFallbackMapping && this.modelFallbackMapping[requestedModel]) {
             const mapping = this.modelFallbackMapping[requestedModel];
             const targetProviderType = mapping.targetProviderType;
             const targetModel = mapping.targetModel;
 
             if (targetProviderType && targetModel) {
-                if (this.providerStatus[targetProviderType] && this.providerStatus[targetProviderType].length > 0) {
-                    try {
-                        const selectedConfig = await this.acquireSlot(targetProviderType, targetModel, options);
-                        if (selectedConfig) {
-                            return {
-                                config: selectedConfig,
-                                actualProviderType: targetProviderType,
-                                isFallback: true,
-                                actualModel: targetModel
-                            };
-                        }
-                    } catch (err) {
-                        // 如果目标类型繁忙，尝试它的 fallback chain
-                        const targetFallbackTypes = this.fallbackChain[targetProviderType] || [];
-                        for (const fallbackType of targetFallbackTypes) {
-                             const targetProtocol = getProtocolPrefix(targetProviderType);
-                             const fallbackProtocol = getProtocolPrefix(fallbackType);
-                             if (targetProtocol !== fallbackProtocol) continue;
-                             
-                             const supportedModels = getProviderModels(fallbackType);
-                             if (supportedModels.length > 0 && !supportedModels.includes(targetModel)) continue;
-                             
-                             try {
-                                const fallbackSelectedConfig = await this.acquireSlot(fallbackType, targetModel, options);
-                                if (fallbackSelectedConfig) {
-                                    return {
-                                        config: fallbackSelectedConfig,
-                                        actualProviderType: fallbackType,
-                                        isFallback: true,
-                                        actualModel: targetModel
-                                    };
-                                }
-                             } catch (e) {
-                                 continue;
-                             }
-                        }
-                    }
+                this._log('info', `All providers for '${requestedModel}' exhausted. Falling back to model '${targetModel}'...`);
+                // 递归调用，尝试下一个模型；递归结果将携带最终选中的 actualModel
+                const recursiveResult = await this.acquireSlotWithFallback(targetProviderType, targetModel, options);
+                if (recursiveResult) {
+                    // 标记为 fallback，并显式回填 actualModel（防止递归层未填写）
+                    recursiveResult.isFallback = true;
+                    if (!recursiveResult.actualModel) recursiveResult.actualModel = targetModel;
                 }
+                return recursiveResult;
             }
         }
 
         return null;
+    }
+
+    /**
+     * 将 model 在某个 providerType 上标记为冷却（短时间内不再被选中）。
+     * 由 common.js 在收到 400 “invalid argument” 时调用，可以让 acquireSlotWithFallback 跳过该
+     * providerType -> modelFallbackMapping。
+     * @param {string} providerType
+     * @param {string} model
+     * @param {number} [durationMs] - 冷却时长，默认 modelCooldownDurationMs
+     */
+    markModelCooldown(providerType, model, durationMs) {
+        if (!providerType || !model) return;
+        const expiry = Date.now() + (durationMs || this.modelCooldownDurationMs);
+        if (!this._modelCooldowns.has(providerType)) {
+            this._modelCooldowns.set(providerType, new Map());
+        }
+        this._modelCooldowns.get(providerType).set(model, expiry);
+        this._log('warn', `[Model Cooldown] ${providerType} :: ${model} cooled down until ${new Date(expiry).toISOString()}`);
+    }
+
+    /**
+     * 检查 model 在某 providerType 上是否处于冷却中。
+     * 同时会清理已过期的条目。
+     */
+    isModelOnCooldown(providerType, model) {
+        if (!providerType || !model) return false;
+        const typeMap = this._modelCooldowns.get(providerType);
+        if (!typeMap) return false;
+        const expiry = typeMap.get(model);
+        if (!expiry) return false;
+        if (Date.now() >= expiry) {
+            typeMap.delete(model);
+            if (typeMap.size === 0) this._modelCooldowns.delete(providerType);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 清除某 model 的冷却（用于测试或手动恢复）。
+     */
+    clearModelCooldown(providerType, model) {
+        const typeMap = this._modelCooldowns.get(providerType);
+        if (!typeMap) return;
+        if (model) typeMap.delete(model);
+        else typeMap.clear();
+        if (typeMap.size === 0) this._modelCooldowns.delete(providerType);
     }
 
     /**
@@ -1268,9 +1316,15 @@ export class ProviderPoolManager {
                 }
             }
 
+            // 跳过模型冷却中的 providerType
+            if (requestedModel && this.isModelOnCooldown(currentType, requestedModel)) {
+                this._log('warn', `Skipping ${currentType} for ${requestedModel} (model on cooldown)`);
+                continue;
+            }
+
             // 尝试从当前类型选择提供商（现在是异步的）
             const selectedConfig = await this.selectProvider(currentType, requestedModel, options);
-            
+
             if (selectedConfig) {
                 if (currentType !== providerType) {
                     this._log('info', `Fallback activated (Chain): ${providerType} -> ${currentType} (node: ${this._getDisplayName(selectedConfig)})`);
@@ -1278,7 +1332,8 @@ export class ProviderPoolManager {
                 return {
                     config: selectedConfig,
                     actualProviderType: currentType,
-                    isFallback: currentType !== providerType
+                    isFallback: currentType !== providerType,
+                    actualModel: requestedModel
                 };
             }
         }
@@ -1628,7 +1683,10 @@ export class ProviderPoolManager {
                 }
                 
                 this._log('warn', `Marked provider as unhealthy: ${this._getDisplayName(providerConfig)} for type ${providerType}. Total errors: ${provider.config.errorCount}`);
-            } 
+            }
+
+            // Persist health state synchronously to SQLite
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
 
             this._debouncedSave(providerType);
         }
@@ -1651,7 +1709,11 @@ export class ProviderPoolManager {
         if (provider) {
             const wasHealthy = provider.config.isHealthy;
             provider.config.isHealthy = false;
-            provider.config.needsRefresh = false; // 报错时不健康，清除刷新标记，防止卡死
+            // Do NOT clear needsRefresh here. If the credential is dead (e.g. 401 after
+            // a manual rotation request), preserving needsRefresh:true lets the user
+            // see the state at /provider_health and act on it. The selection filter
+            // already excludes unhealthy entries, so leaving the flag doesn't cause
+            // "stuck" state — it just keeps the signal visible.
             provider.config.refreshCount = 0;
             provider.config.errorCount = this.maxErrorCount; // Set to max to indicate definitive failure
             provider.config.lastErrorTime = new Date().toISOString();
@@ -1667,7 +1729,10 @@ export class ProviderPoolManager {
             }
 
             this._log('warn', `Immediately marked provider as unhealthy: ${this._getDisplayName(providerConfig)} for type ${providerType}. Reason: ${errorMessage || 'Authentication error'}`);
-           
+
+            // Persist health state synchronously to SQLite
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
+
             this._debouncedSave(providerType);
         }
     }
@@ -1689,7 +1754,11 @@ export class ProviderPoolManager {
         const provider = this._findProvider(providerType, providerConfig.uuid);
         if (provider) {
             provider.config.isHealthy = false;
-            provider.config.needsRefresh = false; // 报错时不健康，清除刷新标记，防止卡死
+            // Do NOT clear needsRefresh here. If the credential is dead (e.g. 401 after
+            // a manual rotation request), preserving needsRefresh:true lets the user
+            // see the state at /provider_health and act on it. The selection filter
+            // already excludes unhealthy entries, so leaving the flag doesn't cause
+            // "stuck" state — it just keeps the signal visible.
             provider.config.refreshCount = 0;
             provider.config.errorCount = this.maxErrorCount; // Set to max to indicate definitive failure
             provider.config.lastErrorTime = new Date().toISOString();
@@ -1707,6 +1776,9 @@ export class ProviderPoolManager {
             } else {
                 this._log('warn', `Marked provider as unhealthy: ${this._getDisplayName(providerConfig)} for type ${providerType}. Reason: ${errorMessage || 'Quota exhausted'}`);
             }
+
+            // Persist health state synchronously to SQLite
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
 
             this._debouncedSave(providerType);
         }
@@ -1757,7 +1829,10 @@ export class ProviderPoolManager {
             }
             
             this._log('info', `Marked provider as healthy: ${this._getDisplayName(provider.config)} for type ${providerType}${resetUsageCount ? ' (usage count reset)' : ''}`);
-            
+
+            // Persist health state synchronously to SQLite
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
+
             this._debouncedSave(providerType);
         }
     }
@@ -1784,6 +1859,9 @@ export class ProviderPoolManager {
             // 标记为健康，以便立即投入使用
             this._log('info', `Reset refresh status and marked healthy for provider ${this._getDisplayName(provider.config)} (${providerType})`);
 
+            // Persist health state synchronously to SQLite
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, providerConfig.uuid));
+
             this._debouncedSave(providerType);
         }
     }
@@ -1808,7 +1886,10 @@ export class ProviderPoolManager {
             provider.config.lastErrorMessage = null;
             provider.config._lastSelectionSeq = 0;
             this._log('info', `Reset provider counters: ${this._getDisplayName(provider.config)} for type ${providerType}`);
-            
+
+            // Persist health state synchronously to SQLite
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, providerConfig.uuid));
+
             this._debouncedSave(providerType);
         }
     }
@@ -1831,6 +1912,12 @@ export class ProviderPoolManager {
         });
 
         this._log('info', `Reset all health status for type ${providerType}`);
+
+        // Persist all accounts synchronously to SQLite
+        pool.forEach((provider, idx) => {
+            this._persistHealthToDb(providerType, provider.config, idx);
+        });
+
         this._debouncedSave(providerType);
     }
 
@@ -1849,6 +1936,7 @@ export class ProviderPoolManager {
         if (provider) {
             provider.config.isDisabled = true;
             this._log('info', `Disabled provider: ${this._getDisplayName(providerConfig)} for type ${providerType}`);
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
             this._debouncedSave(providerType);
         }
     }
@@ -1868,6 +1956,7 @@ export class ProviderPoolManager {
         if (provider) {
             provider.config.isDisabled = false;
             this._log('info', `Enabled provider: ${this._getDisplayName(providerConfig)} for type ${providerType}`);
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
             this._debouncedSave(providerType);
         }
     }
@@ -1946,7 +2035,11 @@ export class ProviderPoolManager {
                         config.lastErrorTime = null;
                         config.lastErrorMessage = null;
                         config.scheduledRecoveryTime = null; // 清除恢复时间
-                        
+
+                        // Persist health recovery to SQLite
+                        const recIdx = this._getAccountIndex(type, config.uuid);
+                        this._persistHealthToDb(type, config, recIdx);
+
                         // 保存更改
                         this._debouncedSave(type);
                     }
@@ -2294,6 +2387,137 @@ export class ProviderPoolManager {
         this._log('warn', `[HealthCheck] ${providerType} failed after ${healthCheckRequests.length} attempts: ${lastError?.message}`);
         return { success: false, modelName, errorMessage: lastError?.message || 'All health check attempts failed' };
     }
+
+    // ─── SQLite health-state persistence ────────────────────────────────────────
+
+    _initDb() {
+        try {
+            this._db = getDb();
+            this._stmts = {
+                upsertAccount: this._db.prepare(`
+                    INSERT INTO accounts (
+                        provider_type, account_index, uuid,
+                        is_healthy, last_error_time, last_error_message,
+                        needs_refresh, error_count, scheduled_recovery_time
+                    ) VALUES (
+                        @provider_type, @account_index, @uuid,
+                        @is_healthy, @last_error_time, @last_error_message,
+                        @needs_refresh, @error_count, @scheduled_recovery_time
+                    )
+                    ON CONFLICT(provider_type, account_index) DO UPDATE SET
+                        uuid                    = excluded.uuid,
+                        is_healthy              = excluded.is_healthy,
+                        last_error_time         = excluded.last_error_time,
+                        last_error_message      = excluded.last_error_message,
+                        needs_refresh           = excluded.needs_refresh,
+                        error_count             = excluded.error_count,
+                        scheduled_recovery_time = excluded.scheduled_recovery_time
+                `),
+                getAccountId: this._db.prepare(
+                    `SELECT id FROM accounts WHERE provider_type = ? AND account_index = ?`
+                ),
+                getAccountByUuid: this._db.prepare(
+                    `SELECT id, account_index FROM accounts WHERE provider_type = ? AND uuid = ?`
+                ),
+                upsertCooldown: this._db.prepare(`
+                    INSERT INTO model_cooldowns (account_id, model, expires_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(account_id, model) DO UPDATE SET expires_at = excluded.expires_at
+                `),
+                getCooldowns: this._db.prepare(
+                    `SELECT model, expires_at FROM model_cooldowns WHERE account_id = ?`
+                ),
+                deleteCooldown: this._db.prepare(
+                    `DELETE FROM model_cooldowns WHERE account_id = ? AND model = ?`
+                ),
+                getHealthOverlay: this._db.prepare(
+                    `SELECT * FROM accounts WHERE provider_type = ?`
+                ),
+            };
+            this._log('info', 'SQLite pool state DB initialised');
+        } catch (err) {
+            this._log('warn', `SQLite init failed — falling back to JSON-only mode: ${err.message}`);
+            this._db = null;
+            this._stmts = null;
+        }
+    }
+
+    _getAccountIndex(providerType, uuid) {
+        const pool = this.providerStatus[providerType] || [];
+        return pool.findIndex(p => p.uuid === uuid);
+    }
+
+    _parseTimestamp(value) {
+        if (!value) return null;
+        if (typeof value === 'number') return value;
+        const ms = Date.parse(value);
+        return Number.isNaN(ms) ? null : ms;
+    }
+
+    _persistHealthToDb(providerType, providerConfig, accountIndex) {
+        if (!this._db || !this._stmts || accountIndex < 0) return;
+        try {
+            this._stmts.upsertAccount.run({
+                provider_type:           providerType,
+                account_index:           accountIndex,
+                uuid:                    providerConfig.uuid || null,
+                is_healthy:              providerConfig.isHealthy !== false ? 1 : 0,
+                last_error_time:         this._parseTimestamp(providerConfig.lastErrorTime),
+                last_error_message:      providerConfig.lastErrorMessage || null,
+                needs_refresh:           providerConfig.needsRefresh ? 1 : 0,
+                error_count:             providerConfig.errorCount || 0,
+                scheduled_recovery_time: this._parseTimestamp(providerConfig.scheduledRecoveryTime),
+            });
+        } catch (err) {
+            this._log('warn', `SQLite health persist failed for ${providerType}[${accountIndex}]: ${err.message}`);
+        }
+    }
+
+    _overlayHealthFromDb() {
+        if (!this._db || !this._stmts) return;
+        try {
+            for (const providerType in this.providerStatus) {
+                const rows = this._stmts.getHealthOverlay.all(providerType);
+                if (rows.length === 0) continue;
+
+                const rowByUuid  = new Map(rows.filter(r => r.uuid).map(r => [r.uuid, r]));
+                const rowByIndex = new Map(rows.map(r => [r.account_index, r]));
+
+                const pool = this.providerStatus[providerType];
+                pool.forEach((providerItem, idx) => {
+                    const config = providerItem.config;
+                    const row = (config.uuid && rowByUuid.get(config.uuid)) || rowByIndex.get(idx);
+                    if (!row) return;
+
+                    config.isHealthy              = row.is_healthy === 1;
+                    config.errorCount             = row.error_count || 0;
+                    config.needsRefresh           = row.needs_refresh === 1;
+                    config.lastErrorTime          = row.last_error_time
+                        ? new Date(row.last_error_time).toISOString() : null;
+                    config.lastErrorMessage       = row.last_error_message || null;
+                    config.scheduledRecoveryTime  = row.scheduled_recovery_time
+                        ? new Date(row.scheduled_recovery_time).toISOString() : null;
+
+                    const accountRow = this._stmts.getAccountId.get(providerType, row.account_index);
+                    if (accountRow) {
+                        const cooldowns = this._stmts.getCooldowns.all(accountRow.id);
+                        const now = Date.now();
+                        if (!config.modelCooldowns || typeof config.modelCooldowns !== 'object' || Array.isArray(config.modelCooldowns)) config.modelCooldowns = {};
+                        for (const cd of cooldowns) {
+                            if (cd.expires_at > now) {
+                                config.modelCooldowns[cd.model] = new Date(cd.expires_at).toISOString();
+                            }
+                        }
+                    }
+                });
+            }
+            this._log('info', 'Health state overlaid from SQLite');
+        } catch (err) {
+            this._log('warn', `SQLite health overlay failed: ${err.message}`);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
 
     /**
      * 优化1: 添加防抖保存方法

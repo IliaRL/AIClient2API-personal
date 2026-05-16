@@ -16,6 +16,10 @@ class ProviderStrategyFactory {
             case MODEL_PROTOCOL_PREFIX.GEMINI:
                 return new GeminiStrategy();
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
+                // NVIDIA NIM and GitHub Models share the OpenAI Chat Completions strategy
+                // (same request/response shape, just different upstream endpoints).
                 return new OpenAIStrategy();
             case MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES:
                 return new ResponsesAPIStrategy();

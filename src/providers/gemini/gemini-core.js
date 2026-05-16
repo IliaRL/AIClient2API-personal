@@ -22,8 +22,8 @@ const CREDENTIALS_DIR = '.gemini';
 const CREDENTIALS_FILE = 'oauth_creds.json';
 const DEFAULT_CODE_ASSIST_ENDPOINT = 'https://cloudcode-pa.googleapis.com';
 const DEFAULT_CODE_ASSIST_API_VERSION = 'v1internal';
-const OAUTH_CLIENT_ID = '681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com';
-const OAUTH_CLIENT_SECRET = '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';
+const OAUTH_CLIENT_ID = '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com';
+const OAUTH_CLIENT_SECRET = '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';
 const GEMINI_MODELS = getProviderModels(MODEL_PROVIDER.GEMINI_CLI);
 const ANTI_TRUNCATION_MODELS = GEMINI_MODELS.map(model => `anti-${model}`);
 const GEMINI_CLI_VERSION = '0.31.0';
@@ -341,6 +341,12 @@ export class GeminiApiService {
         try {
             const data = await fs.readFile(credPath, "utf8");
             const credentials = JSON.parse(data);
+            // authorized_user files from `gcloud auth login` / `gemini auth login` carry
+            // their own client_id + client_secret which may differ from the hardcoded
+            // OAUTH_CLIENT_ID/SECRET constants. Override the OAuth2Client's client
+            // credentials so token refresh uses the correct client.
+            if (credentials.client_id) this.authClient._clientId = credentials.client_id;
+            if (credentials.client_secret) this.authClient._clientSecret = credentials.client_secret;
             this.authClient.setCredentials(credentials);
             logger.info('[Gemini Auth] Credentials loaded successfully from file.');
         } catch (error) {
@@ -537,7 +543,18 @@ export class GeminiApiService {
             return discoveredProjectId;
         } catch (error) {
             logger.error('[Gemini] Failed to discover Project ID:', error.response?.data || error.message);
-            throw new Error('Could not discover a valid Google Cloud Project ID.');
+            // Fallback: generate a synthetic project ID (mirrors antigravity-core behavior).
+            // Required because free-tier Google accounts sometimes return no
+            // cloudaicompanionProject and no allowedTiers, leaving onboarding unable to complete.
+            // Without this fallback, every gemini-cli request fails permanently.
+            const adjectives = ['useful', 'bright', 'swift', 'calm', 'bold'];
+            const nouns = ['fuze', 'wave', 'spark', 'flow', 'core'];
+            const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+            const noun = nouns[Math.floor(Math.random() * nouns.length)];
+            const randomPart = Math.random().toString(36).substring(2, 7);
+            const fallbackProjectId = `${adj}-${noun}-${randomPart}`;
+            logger.warn(`[Gemini] Using fallback Project ID: ${fallbackProjectId}`);
+            return fallbackProjectId;
         }
     }
 

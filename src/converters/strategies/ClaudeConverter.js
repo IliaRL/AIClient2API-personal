@@ -10,6 +10,7 @@ import {
     checkAndAssignOrDefault,
     cleanJsonSchemaForOpenAI,
     determineReasoningEffortFromBudget,
+    flattenToolArguments,
     GEMINI_DEFAULT_INPUT_TOKEN_LIMIT,
     GEMINI_DEFAULT_OUTPUT_TOKEN_LIMIT,
     OPENAI_DEFAULT_MAX_TOKENS,
@@ -50,6 +51,9 @@ export class ClaudeConverter extends BaseConverter {
     convertRequest(data, targetProtocol) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
+                // NVIDIA NIM and GitHub Models both speak the OpenAI Chat Completions wire format.
                 return this.toOpenAIRequest(data);
             case MODEL_PROTOCOL_PREFIX.GEMINI:
                 return this.toGeminiRequest(data);
@@ -70,6 +74,8 @@ export class ClaudeConverter extends BaseConverter {
     convertResponse(data, targetProtocol, model) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
                 return this.toOpenAIResponse(data, model);
             case MODEL_PROTOCOL_PREFIX.GEMINI:
                 return this.toGeminiResponse(data, model);
@@ -88,6 +94,8 @@ export class ClaudeConverter extends BaseConverter {
     convertStreamChunk(chunk, targetProtocol, model, requestId) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
+            case MODEL_PROTOCOL_PREFIX.NVIDIA:
+            case MODEL_PROTOCOL_PREFIX.GITHUB:
                 return this.toOpenAIStreamChunk(chunk, model);
             case MODEL_PROTOCOL_PREFIX.GEMINI:
                 return this.toGeminiStreamChunk(chunk, model);
@@ -189,7 +197,11 @@ export class ClaudeConverter extends BaseConverter {
                     const toolUsePart = msg.content.find(b => b && b.type === "tool_use");
                     if (toolUsePart) {
                         const funcName = toolUsePart.name || "";
-                        const funcArgs = toolUsePart.input || {};
+                        let funcArgs = toolUsePart.input || {};
+
+                        // [Schema Guard] Flatten arguments
+                        funcArgs = flattenToolArguments(funcName, funcArgs);
+
                         const toolCallMsg = {
                             role: "assistant",
                             content: '',
@@ -496,28 +508,30 @@ export class ClaudeConverter extends BaseConverter {
             
             // 处理 tool_use 类型
             if (contentBlock && contentBlock.type === 'tool_use') {
-                return {
-                    id: chunkId,
-                    object: "chat.completion.chunk",
-                    created: timestamp,
-                    model: model,
-                    system_fingerprint: "",
-                    choices: [{
-                        index: 0,
-                        delta: {
-                            tool_calls: [{
-                                index: claudeChunk.index || 0,
-                                id: contentBlock.id,
-                                type: "function",
-                                function: {
-                                    name: contentBlock.name,
-                                    arguments: ""
-                                }
-                            }]
-                        },
-                        finish_reason: null
-                    }]
-                };
+                return [
+                    {
+                        id: chunkId,
+                        object: "chat.completion.chunk",
+                        created: timestamp,
+                        model: model,
+                        system_fingerprint: "",
+                        choices: [{
+                            index: 0,
+                            delta: {
+                                tool_calls: [{
+                                    index: claudeChunk.index || 0,
+                                    id: contentBlock.id,
+                                    type: "function",
+                                    function: {
+                                        name: contentBlock.name,
+                                        arguments: ""
+                                    }
+                                }]
+                            },
+                            finish_reason: null
+                        }]
+                    }
+                ];
             }
 
             // 处理 text 类型

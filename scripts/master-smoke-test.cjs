@@ -129,6 +129,57 @@ async function testToolUse(model) {
   }
 }
 
+async function testSchemaGuard(model) {
+  console.log(`\n[Schema Guard] Testing ${model} (Flattening)...`);
+  const res = await makeRequest({
+    hostname: HOST,
+    port: PORT,
+    path: '/v1/messages',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`
+    }
+  }, {
+    model: model,
+    max_tokens: 1024,
+    tools: [{
+      name: 'Skill',
+      description: 'Execute a skill',
+      input_schema: {
+        type: 'object',
+        properties: {
+          skill: { type: 'string' },
+          args: { type: 'string' }
+        },
+        required: ['skill']
+      }
+    }],
+    // Force a "bad" input that the proxy should fix
+    messages: [{
+      role: 'user',
+      content: 'Run the test skill with args: {"nested": "value"}. Use the Skill tool.'
+    }]
+  });
+
+  if (res.statusCode === 200) {
+    const json = JSON.parse(res.data);
+    const toolUse = json.content.find(c => c.type === 'tool_use');
+    if (toolUse && toolUse.name === 'Skill') {
+      const argsType = typeof toolUse.input.args;
+      if (argsType === 'string') {
+        console.log(`✅ Success: Tool call argument was flattened to string: ${toolUse.input.args}`);
+      } else {
+        console.log(`❌ Failed: Argument remains ${argsType}, expected string. Value: ${JSON.stringify(toolUse.input.args)}`);
+      }
+    } else {
+      console.log(`❌ Failed: No tool call found in response: ${JSON.stringify(json.content)}`);
+    }
+  } else {
+    console.log(`❌ Failed (${res.statusCode}): ${res.data}`);
+  }
+}
+
 async function run() {
   console.log('Starting Master Smoke Test...');
 
@@ -152,6 +203,37 @@ async function run() {
   // 4. Tool Use Test
   console.log('\n--- 4. Tool Use ---');
   await testToolUse('claude-sonnet-4-6');
+
+  // 5. Schema Guard Test (Flattening)
+  console.log('\n--- 5. Schema Guard (Flattening) ---');
+  await testSchemaGuard('claude-sonnet-4-6');
+
+  // 6. Claude-pick Routing Test
+  console.log('\n--- 6. Claude-pick Routing (High-Tier) ---');
+  // Tests the routing for models typically used by claude-pick
+  const highTierModels = ['claude-sonnet-4-6', 'gemini-3.1-pro-low', 'gpt-4o'];
+  for (const model of highTierModels) {
+    await testChat(model);
+  }
+
+  // 7. Identity Verification Test
+  console.log('\n--- 7. Identity Verification ---');
+  const identityRes = await makeRequest({
+    hostname: HOST, port: PORT, path: '/v1/messages', method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` }
+  }, {
+    model: 'gemini-3-flash',
+    max_tokens: 10,
+    messages: [{ role: 'user', content: 'respond with ok' }]
+  });
+  if (identityRes.statusCode === 200) {
+    const json = JSON.parse(identityRes.data);
+    if (json.model === 'gemini-3-flash') {
+      console.log('✅ Success: Model identity preserved in response');
+    } else {
+      console.log(`❌ Failed: Model identity mismatch. Expected gemini-3-flash, got ${json.model}`);
+    }
+  }
 
   console.log('\nMaster Smoke Test Completed.');
 }

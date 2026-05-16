@@ -387,6 +387,115 @@ async function _resolveEffectiveRouting(config, requestedModel) {
             actualModelName = modelSuffix;
             logger.info(`[Routing] Prefix resolved: ${prefix}:${modelSuffix}`);
         }
+    } else if (requestedModel) {
+        // 1.1. 智能自动路由：根据模型名称模式映射到提供商
+        const modelLower = requestedModel.toLowerCase();
+
+        // NVIDIA 模型
+        if (modelLower.includes('nvidia/') || modelLower.includes('nemotron')) {
+            effectiveProvider = MODEL_PROVIDER.NVIDIA_NIM;
+            logger.info(`[Routing] Auto-routed to NVIDIA NIM: ${requestedModel}`);
+        }
+        // GitHub Models (GPT-4o, o1, etc. when prefix is missing)
+        else if (modelLower.startsWith('gpt-4o') || modelLower.startsWith('o1-') || modelLower.startsWith('o3-')) {
+            effectiveProvider = MODEL_PROVIDER.GITHUB_MODELS;
+            logger.info(`[Routing] Auto-routed to GitHub Models: ${requestedModel}`);
+        }
+        // DeepSeek R1 (GitHub variant often uses capital letters or specific case)
+        else if (requestedModel === 'DeepSeek-R1' || requestedModel === 'DeepSeek-V3-0324') {
+            effectiveProvider = MODEL_PROVIDER.GITHUB_MODELS;
+            logger.info(`[Routing] Auto-routed to GitHub Models: ${requestedModel}`);
+        }
+        // Standard Claude ID mapping with identity preservation.
+        // Priority:
+        //   1. If Kiro is in the cascade and serves the requested claude-* model natively,
+        //      lock to Kiro (preserves model identity for Claude Code users).
+        //   2. Otherwise, if Antigravity is in the cascade and has the gemini-claude-* alias,
+        //      remap to the alias (existing behavior).
+        // Note: config.MODEL_PROVIDER is the first item of the configured cascade
+        // (see normalizeConfiguredProviders), so we must inspect DEFAULT_MODEL_PROVIDERS,
+        // not just MODEL_PROVIDER, when running in cascade mode.
+        else if (requestedModel.startsWith('claude-') && !requestedModel.includes(':') && effectiveProvider !== 'claude-kiro-oauth') {
+            const { PROVIDER_MODELS } = await import('../providers/provider-models.js');
+            const cascade = Array.isArray(config.DEFAULT_MODEL_PROVIDERS) ? config.DEFAULT_MODEL_PROVIDERS : [];
+            const inAutoOrCascade =
+                effectiveProvider === MODEL_PROVIDER.AUTO ||
+                cascade.length > 1;
+
+            const isKiroEnabled = cascade.includes(MODEL_PROVIDER.KIRO_API) ||
+                                  config.MODEL_PROVIDER === MODEL_PROVIDER.KIRO_API ||
+                                  config.MODEL_PROVIDER === MODEL_PROVIDER.AUTO;
+
+            const kiroHasModel = isKiroEnabled &&
+                PROVIDER_MODELS[MODEL_PROVIDER.KIRO_API]?.includes(requestedModel);
+
+            if (kiroHasModel) {
+                if (inAutoOrCascade) {
+                    effectiveProvider = MODEL_PROVIDER.KIRO_API;
+                }
+                // Keep actualModelName == requestedModel for identity preservation.
+                logger.info(`[Routing] Preserved Claude model identity via Kiro: ${requestedModel}`);
+            } else {
+                const optimizedId = `gemini-${requestedModel}`;
+                const isAntigravityEnabled = cascade.includes(MODEL_PROVIDER.ANTIGRAVITY) ||
+                                            config.MODEL_PROVIDER === MODEL_PROVIDER.ANTIGRAVITY ||
+                                            config.MODEL_PROVIDER === MODEL_PROVIDER.AUTO;
+                if (isAntigravityEnabled &&
+                    PROVIDER_MODELS[MODEL_PROVIDER.ANTIGRAVITY]?.includes(optimizedId)) {
+                    actualModelName = optimizedId;
+                    if (inAutoOrCascade) {
+                        effectiveProvider = MODEL_PROVIDER.ANTIGRAVITY;
+                    }
+                    logger.info(`[Routing] Auto-mapped Claude alias: ${requestedModel} -> ${optimizedId}`);
+                }
+            }
+        }
+    }
+
+    // 1.2. 兜底：基于静态模型目录的反向查找
+    // When running in cascade mode (multiple providers configured), the resolver
+    // would otherwise return the first cascade item even for models that only one
+    // provider actually serves (e.g. gpt-5.2 → codex). We scan the catalog and
+    // pin the request to the first cascade provider that declares the model.
+    // This preserves identity and avoids Antigravity silently substituting its
+    // default gemini-3-flash for every unrecognised model name.
+    if (requestedModel && !requestedModel.includes(':')) {
+        const cascade = Array.isArray(config.DEFAULT_MODEL_PROVIDERS) ? config.DEFAULT_MODEL_PROVIDERS : [];
+        const inAutoOrCascade =
+            effectiveProvider === MODEL_PROVIDER.AUTO ||
+            cascade.length > 1;
+        if (inAutoOrCascade) {
+            const { PROVIDER_MODELS } = await import('../providers/provider-models.js');
+            const declaredBy = [];
+            for (const providerType of Object.keys(PROVIDER_MODELS)) {
+                const models = PROVIDER_MODELS[providerType];
+                if (Array.isArray(models) && models.includes(requestedModel)) {
+                    declaredBy.push(providerType);
+                }
+            }
+            // OpenRouter models live in custom_models.json with provider 'openai-custom'.
+            if (Array.isArray(config.customModels)) {
+                const cm = config.customModels.find(m => m.id === requestedModel || m.alias === requestedModel);
+                if (cm && cm.provider && !declaredBy.includes(cm.provider)) {
+                    declaredBy.push(cm.provider);
+                }
+            }
+            if (declaredBy.length > 0) {
+                // Prefer the cascade order: pick the first cascade provider that declares the model.
+                let picked = null;
+                for (const cascadeType of cascade) {
+                    if (declaredBy.includes(cascadeType)) {
+                        picked = cascadeType;
+                        break;
+                    }
+                }
+                if (!picked) picked = declaredBy[0];
+                if (picked !== effectiveProvider) {
+                    logger.info(`[Routing] Catalog-pinned ${requestedModel} -> ${picked}`);
+                    effectiveProvider = picked;
+                }
+            }
+        }
     }
 
     // 2. 严格性检查：在 AUTO 模式下，如果到这里还没解析出具体提供商，则报错 (除非是列出模型场景)

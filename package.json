@@ -8,6 +8,7 @@
     "adm-zip": "^0.5.16",
     "ai": "^6.0.175",
     "axios": "^1.14.0",
+    "better-sqlite3": "^12.10.0",
     "deepmerge": "^4.3.1",
     "dotenv": "^16.6.1",
     "google-auth-library": "^10.1.0",
@@ -43,7 +44,9 @@
     "test:unit": "node run-tests.js --unit",
     "test:integration": "node run-tests.js --integration",
     "test:summary": "node test-summary.js",
+    "test:suite": "node scripts/unified-test-suite.cjs",
     "help": "node src/scripts/help.js",
-    "example:api": "node src/scripts/example-api.js"
+    "example:api": "node src/scripts/example-api.js",
+    "build:native": "cd src/native/tokenizer-rs && $HOME/.cargo/bin/cargo build --release && mkdir -p ../../../build/native && cp target/release/libaiclient_tokenizer.dylib ../../../build/native/aiclient-tokenizer.node"
   }
 }

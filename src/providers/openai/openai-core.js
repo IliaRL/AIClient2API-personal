@@ -37,7 +37,8 @@ export class OpenAIApiService {
             baseURL: this.baseUrl,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`
+                'Authorization': `Bearer ${this.apiKey}`,
+                'User-Agent': 'AIClient2API/3.0.6 (GitHub Models Support)'
             },
         };
         

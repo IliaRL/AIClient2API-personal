@@ -82,6 +82,30 @@ export function convertData(data, type, fromProvider, toProvider, model, request
     }
 }
 
+/**
+ * 创建用于流式协议转换的 Transform 流
+ * @param {string} fromProvider - 源模型提供商
+ * @param {string} toProvider - 目标模型提供商
+ * @param {string} [model] - 可选的模型名称
+ * @param {string} [requestId] - 可选的请求ID
+ * @returns {Transform|null} 转换流，如果协议相同则返回 null
+ */
+export function convertStream(fromProvider, toProvider, model, requestId) {
+    const fromProtocol = getProtocolPrefix(fromProvider);
+    const toProtocol = getProtocolPrefix(toProvider);
+
+    if (fromProtocol === toProtocol || toProtocol === MODEL_PROTOCOL_PREFIX.FORWARD || fromProtocol === MODEL_PROTOCOL_PREFIX.FORWARD) {
+        return null;
+    }
+
+    const converter = ConverterFactory.getConverter(fromProtocol);
+    if (!converter) {
+        throw new Error(`No converter found for protocol: ${fromProtocol}`);
+    }
+
+    return converter.convertStream(toProtocol, model, requestId);
+}
+
 // =============================================================================
 // 向后兼容的导出函数
 // =============================================================================

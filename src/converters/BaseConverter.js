@@ -3,6 +3,8 @@
  * 使用策略模式定义转换器的通用接口
  */
 
+import { Transform } from 'stream';
+
 /**
  * 抽象转换器基类
  * 所有具体的协议转换器都应继承此类
@@ -41,10 +43,40 @@ export class BaseConverter {
      * @param {Object} chunk - 流式响应块
      * @param {string} targetProtocol - 目标协议
      * @param {string} model - 模型名称
-     * @returns {Object} 转换后的流式响应块
+     * @param {string} [requestId] - 可选的请求ID
+     * @returns {Object|Array} 转换后的流式响应块或块数组
      */
-    convertStreamChunk(chunk, targetProtocol, model) {
+    convertStreamChunk(chunk, targetProtocol, model, requestId) {
         throw new Error('convertStreamChunk方法必须被子类实现');
+    }
+
+    /**
+     * 创建一个用于流式转换的 Transform 流
+     * @param {string} targetProtocol - 目标协议
+     * @param {string} model - 模型名称
+     * @param {string} requestId - 请求ID
+     * @returns {Transform} 转换流
+     */
+    convertStream(targetProtocol, model, requestId) {
+        const self = this;
+        return new Transform({
+            objectMode: true,
+            transform(chunk, encoding, callback) {
+                try {
+                    const converted = self.convertStreamChunk(chunk, targetProtocol, model, requestId);
+                    if (converted) {
+                        if (Array.isArray(converted)) {
+                            converted.forEach(c => this.push(c));
+                        } else {
+                            this.push(converted);
+                        }
+                    }
+                    callback();
+                } catch (err) {
+                    callback(err);
+                }
+            }
+        });
     }
 
     /**

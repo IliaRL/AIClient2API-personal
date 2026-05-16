@@ -1,11 +1,16 @@
 node_modules
+build/native/*.node
+src/native/tokenizer-rs/target/
+data/pool.db
+data/pool.db-shm
+data/pool.db-wal
+data/proxy.db
+data/proxy.db-shm
+data/proxy.db-wal
 logs/
 .serena/
 .claude/
-CLAUDE.md
-config.json
 provider_pools.json
-custom_models.json
 plugins.json
 fetch_system_prompt.txt
 input_system_prompt.txt
@@ -17,5 +22,6 @@ usage-cache.json
 api-potluck-keys.json
 api-potluck-data.json
 model-usage-stats.json
+master_creds.json
+.DS_Store
 AGENTS.md
-

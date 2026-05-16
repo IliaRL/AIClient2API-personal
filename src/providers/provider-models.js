@@ -16,10 +16,14 @@ export function getCustomModelConfig(modelId, provider = null) {
     let targetProvider = provider && provider !== MODEL_PROVIDER.AUTO ? provider : null;
     let targetModelId = modelId;
 
+    // Only treat "prefix:rest" as provider:model when prefix has no slash
+    // (provider names are simple tokens; model IDs like "openai/gpt-oss-20b:free" must not be split)
     if (typeof modelId === 'string' && modelId.includes(':')) {
         const [prefix, ...modelParts] = modelId.split(':');
-        targetProvider = prefix;
-        targetModelId = modelParts.join(':');
+        if (!prefix.includes('/')) {
+            targetProvider = prefix;
+            targetModelId = modelParts.join(':');
+        }
     }
 
     if (!targetProvider) {
@@ -41,35 +45,26 @@ export function getCustomModelConfig(modelId, provider = null) {
  */
 export const PROVIDER_MODELS = {
     'gemini-cli-oauth': [
+        // Active gemini-cli-oauth models (gemma removed 2026-05-15 — no longer
+        // exposed on the upstream account).
+        'gemini-3.1-pro-preview',
+        'gemini-3-flash-preview',
+        'gemini-3.1-flash-lite-preview',
+        'gemini-2.5-pro',
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
-        'gemini-2.5-pro',
-        'gemini-3-pro-preview',
-        'gemini-3-flash-preview',
-        'gemini-3.1-pro-preview',
-        'gemini-3.1-flash-lite-preview',
     ],
     'gemini-antigravity': [
         'gemini-3-flash',
         'gemini-3.1-pro-high',
         'gemini-3.1-pro-low',
-        'gemini-3.1-flash-image',
-        'gemini-3-flash-agent',
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-2.5-flash-thinking',
         'gemini-claude-sonnet-4-6',
         'gemini-claude-opus-4-6-thinking',
     ],
     'claude-custom': [],
     'claude-kiro-oauth': [
+        // Only these three models are verified live on this account. Re-add others only after confirming access.
         'claude-haiku-4-5',
-        'claude-haiku-4-5-20251001',
-        'claude-opus-4-7',
-        'claude-opus-4-6',
-        'claude-sonnet-4-6',
-        'claude-opus-4-5',
-        'claude-opus-4-5-20251101',
         'claude-sonnet-4-5',
         'claude-sonnet-4-5-20250929',
     ],
@@ -110,22 +105,47 @@ export const PROVIDER_MODELS = {
         'minimax-m2.5',
     ],
     'openai-codex-oauth': [
+        // Verified live on 2026-05-15. gpt-5.3-codex-spark returned 400 invalid
+        // request upstream and was removed; re-add if Codex enables it.
         'gpt-5.2',
         'gpt-5.3-codex',
-        'gpt-5.3-codex-spark',
         'gpt-5.4',
         'gpt-5.4-mini',
         'gpt-5.5',
-        'gpt-image-2',
     ],
     'github-models': [
-        'gpt-5-mini',
-        'claude-haiku-4-5',
+        // Exhaustively live-verified 2026-05-16 against models.inference.ai.azure.com.
+        // Dead: gpt-5-mini (unavailable), claude-haiku-4-5 (unknown), o3-mini (unavailable),
+        //       o1/o1-mini/o1-preview (unavailable), all Mistral variants (unknown),
+        //       Meta-Llama 70B/3.3/3.2 (unknown), Phi-3.5, Cohere, AI21 (unknown).
+        'gpt-4o',
+        'gpt-4o-mini',
         'gpt-4.1',
-        'gpt-4o'
+        'gpt-4.1-mini',
+        'gpt-4.1-nano',
+        'DeepSeek-R1',
+        'DeepSeek-V3-0324',
+        'Meta-Llama-3.1-405B-Instruct',
+        'Meta-Llama-3.1-8B-Instruct',
+        'Phi-4'
     ],
     'nvidia-nim': [
-        'nvidia/llama-3.1-nemotron-ultra-253b'
+        // Verified live against integrate.api.nvidia.com on 2026-05-15 with the
+        // configured account. Older entries (nvidia/llama-3.1-nemotron-ultra-253b,
+        // qwen/qwen3-235b-a22b, microsoft/phi-4-reasoning-plus,
+        // deepseek-ai/deepseek-r1-0528, google/gemma-3-27b-it,
+        // moonshotai/kimi-k2-instruct, nvidia/llama-3.3-nemotron-super-49b)
+        // 404/410 on this key and were removed.
+        'nvidia/llama-3.3-nemotron-super-49b-v1.5',
+        'nvidia/llama-3.3-nemotron-super-49b-v1',
+        'meta/llama-4-maverick-17b-128e-instruct',
+        'meta/llama-3.3-70b-instruct',
+        'moonshotai/kimi-k2.6',
+        'minimaxai/minimax-m2.7',
+        'deepseek-ai/deepseek-v4-pro',
+        'mistralai/mistral-large-3-675b-instruct-2512',
+        'mistralai/mistral-small-4-119b-2603',
+        'openai/gpt-oss-120b'
     ],
     'forward-api': [],
     'grok-web': [

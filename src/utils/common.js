@@ -188,7 +188,9 @@ export function getRateLimitCooldownRecoveryTime(error, config = {}, now = Date.
     const maxCooldownMs = getPositiveInteger(config.RATE_LIMIT_COOLDOWN_MAX_MS, 300000);
     const jitterMs = getPositiveInteger(config.RATE_LIMIT_COOLDOWN_JITTER_MS, 0);
     const retryAfterMs = getRetryAfterMs(error, now);
-    const baseCooldownMs = retryAfterMs === null ? defaultCooldownMs : retryAfterMs;
+    // Treat Retry-After: 0 as "no valid retry time" (Gemini sends 0 for capacity exhaustion).
+    // Without this, baseCooldownMs=0 → account recovers immediately → infinite retry storm.
+    const baseCooldownMs = (retryAfterMs === null || retryAfterMs === 0) ? defaultCooldownMs : retryAfterMs;
     const cappedCooldownMs = Math.min(baseCooldownMs, Math.max(defaultCooldownMs, maxCooldownMs));
     const jitter = jitterMs > 0 ? Math.floor(Math.random() * (jitterMs + 1)) : 0;
 
@@ -381,6 +383,36 @@ function appendCustomModelsToModelList(clientModelList, customEntries, providerT
 }
 
 /**
+ * Updates a temporary file with the ID of the last model used.
+ * Used for accurate shell statusline reporting.
+ * @param {string} model - The model ID.
+ */
+export async function updateLastModelFile(model) {
+    try {
+        await fs.writeFile('/tmp/aiclient_last_model', model);
+    } catch (err) {
+        // Silently ignore errors
+    }
+}
+
+/**
+ * Applies a short (60s) model-level cooldown for 400 errors so other pool accounts can rotate in.
+ * 429/5xx errors use the default 5-minute cooldown set elsewhere.
+ * Returns true if a cooldown was applied (caller should set credentialMarkedUnhealthy).
+ */
+function _applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error) {
+    if ((error?.response?.status === 400 || status === 400) && providerPoolManager && toProvider && model) {
+        try {
+            providerPoolManager.markModelCooldown(toProvider, model, 60000);
+        } catch (e) {
+            logger.warn(`[Provider Pool] markModelCooldown failed: ${e.message}`);
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
  * Extracts the protocol prefix from a given model provider string.
  * This is used to determine if two providers belong to the same underlying protocol (e.g., gemini, openai, claude).
  * @param {string} provider - The model provider string (e.g., 'gemini-cli', 'openai-custom').
@@ -392,9 +424,18 @@ export function getProtocolPrefix(provider) {
         return 'codex';
     }
 
+    // Explicit mappings for static-key providers
+    if (provider === 'nvidia-nim') return MODEL_PROTOCOL_PREFIX.NVIDIA;
+    if (provider === 'github-models') return MODEL_PROTOCOL_PREFIX.GITHUB;
+
     const hyphenIndex = provider.indexOf('-');
     if (hyphenIndex !== -1) {
-        return provider.substring(0, hyphenIndex);
+        const prefix = provider.substring(0, hyphenIndex);
+        // Antigravity wrapped Claude models or thinking models
+        if (prefix === 'gemini' && (provider.includes('claude') || provider.includes('thinking'))) {
+            return 'gemini-claude';
+        }
+        return prefix;
     }
     return provider; // Return original if no hyphen is found
 }
@@ -582,12 +623,37 @@ export function isAuthorized(req, requestUrl, REQUIRED_API_KEY) {
  * @param {Object} responsePayload - The actual response payload (string for unary, object for stream chunks).
  * @param {boolean} isStream - Whether the response is a stream.
  */
-export async function handleUnifiedResponse(res, responsePayload, isStream, statusCode = 200) {
+export async function handleUnifiedResponse(res, responsePayload, isStream, statusCode = 200, metadata = {}) {
     const validatedStatusCode = ensureValidStatusCode(statusCode);
+
+    const headers = {
+        "Cache-Control": "no-cache"
+    };
+
     if (isStream) {
-        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive", "Transfer-Encoding": "chunked" });
+        headers["Content-Type"] = "text/event-stream";
+        headers["Connection"] = "keep-alive";
+        headers["Transfer-Encoding"] = "chunked";
     } else {
-        res.writeHead(validatedStatusCode, { 'Content-Type': 'application/json' });
+        headers["Content-Type"] = "application/json";
+    }
+
+    // Inject observability headers
+    if (metadata.actualProvider) {
+        headers["X-Proxy-Actual-Provider"] = metadata.actualProvider;
+    }
+    if (metadata.actualModel) {
+        headers["X-Proxy-Actual-Model"] = metadata.actualModel;
+    }
+    if (metadata.isFallback) {
+        headers["X-Proxy-Fallback-Used"] = "true";
+    }
+    if (metadata.uuid) {
+        headers["X-Proxy-Credential-Uuid"] = metadata.uuid;
+    }
+
+    if (!res.headersSent) {
+        res.writeHead(isStream ? 200 : validatedStatusCode, headers);
     }
 
     if (isStream) {
@@ -640,7 +706,13 @@ export async function handleStreamRequest(res, service, model, requestBody, from
 
     // 只在首次请求时发送响应头，重试时跳过（响应头已发送）
     if (!isRetry) {
-        await handleUnifiedResponse(res, '', true);
+        const metadata = {
+            actualProvider: toProvider,
+            actualModel: model,
+            isFallback: retryContext?.isFallback || false,
+            uuid: pooluuid
+        };
+        await handleUnifiedResponse(res, '', true, 200, metadata);
     }
 
     let hasToolCall = false;
@@ -751,8 +823,11 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                     // fullResponseJson += chunk.type+"\n";
                     if (!clientDisconnected.value && !res.writableEnded) {
                         try {
-                            res.write(`event: ${chunk.type}\n`);
+                            const okEvent = res.write(`event: ${chunk.type}\n`);
                             anyDataSent = true;
+                            if (okEvent === false && !clientDisconnected.value) {
+                                await new Promise((resolve) => res.once('drain', resolve));
+                            }
                         } catch (writeErr) {
                             logger.error('[Stream] Failed to write event:', writeErr.message);
                             clientDisconnected.value = true;
@@ -766,8 +841,11 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                 // fullResponseJson += JSON.stringify(chunk)+"\n\n";
                 if (!clientDisconnected.value && !res.writableEnded) {
                     try {
-                        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                        const okData = res.write(`data: ${JSON.stringify(chunk)}\n\n`);
                         anyDataSent = true;
+                        if (okData === false && !clientDisconnected.value) {
+                            await new Promise((resolve) => res.once('drain', resolve));
+                        }
                     } catch (writeErr) {
                         logger.error('[Stream] Failed to write data:', writeErr.message);
                         clientDisconnected.value = true;
@@ -785,6 +863,8 @@ export async function handleStreamRequest(res, service, model, requestBody, from
             providerPoolManager.markProviderHealthy(toProvider, {
                 uuid: pooluuid
             });
+            // Update last model file for statusline accuracy
+            updateLastModelFile(model);
         }
 
     }  catch (error) {
@@ -837,7 +917,7 @@ export async function handleStreamRequest(res, service, model, requestBody, from
         // 如果底层未标记，且不跳过错误计数，则在此处标记
         if (!credentialMarkedUnhealthy && !skipErrorCount && providerPoolManager && pooluuid) {
             // 400 报错码通常是请求参数问题，不记录为提供商错误
-            if (error.response?.status === 400) {
+            if (error.response?.status === 400 || status === 400) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to status 400 (client error)`);
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to stream error (status: ${status || 'unknown'})`);
@@ -848,17 +928,22 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                 credentialMarkedUnhealthy = true;
             }
         }
-        
+
+        if (_applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error)) {
+            credentialMarkedUnhealthy = true;
+        }
+
         // 如果需要切换凭证（无论是否标记不健康），都设置标记以触发重试
         if (shouldSwitchCredential && !credentialMarkedUnhealthy) {
             credentialMarkedUnhealthy = true; // 触发下面的重试逻辑
         }
-        
+
         // 凭证已被标记为不健康后，尝试切换到新凭证重试
         // 不再依赖状态码判断，只要凭证被标记不健康且可以重试，就尝试切换
         if (credentialMarkedUnhealthy && currentRetry < maxRetries && providerPoolManager && CONFIG) {
-            // 增加10秒内的随机等待时间，避免所有请求同时切换凭证
-            const randomDelay = Math.floor(Math.random() * 10000); // 0-10000毫秒
+            // Small jitter to avoid stampede when multiple concurrent requests switch at once.
+            // 500ms max is sufficient — 10s was causing 1-2 minute stalls with 10 retries.
+            const randomDelay = Math.floor(Math.random() * 500); // 0-500ms
             logger.info(`[Stream Retry] Credential marked unhealthy. Waiting ${randomDelay}ms before retry ${currentRetry + 1}/${maxRetries} with different credential...`);
             await new Promise(resolve => setTimeout(resolve, randomDelay));
             
@@ -878,7 +963,8 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                         currentRetry: currentRetry + 1,
                         maxRetries,
                         clientDisconnected,  // 传递断开状态
-                        anyDataSent          // 传递数据发送状态
+                        anyDataSent,          // 传递数据发送状态
+                        isFallback: result.isFallback || retryContext?.isFallback || false
                     };
                     
                     // 递归调用，使用新的服务
@@ -1010,7 +1096,13 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         }
 
         //logger.info(`[Response] Sending response to client: ${JSON.stringify(clientResponse)}`);
-        await handleUnifiedResponse(res, JSON.stringify(clientResponse), false);
+        const metadata = {
+            actualProvider: toProvider,
+            actualModel: model,
+            isFallback: retryContext?.isFallback || false,
+            uuid: pooluuid
+        };
+        await handleUnifiedResponse(res, JSON.stringify(clientResponse), false, 200, metadata);
         await logConversation('output', responseText, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
         // fs.writeFile('oldResponse'+Date.now()+'.json', JSON.stringify(clientResponse));
         
@@ -1021,6 +1113,8 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
             providerPoolManager.markProviderHealthy(toProvider, {
                 uuid: pooluuid
             });
+            // Update last model file for statusline accuracy
+            updateLastModelFile(model);
         }
     } catch (error) {
         logger.error('\n[Server] Error during unary processing:', error.stack);
@@ -1048,7 +1142,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         // 如果底层未标记，且不跳过错误计数，则在此处标记
         if (!credentialMarkedUnhealthy && !skipErrorCount && providerPoolManager && pooluuid) {
             // 400 报错码通常是请求参数问题，不记录为提供商错误
-            if (error.response?.status === 400) {
+            if (error.response?.status === 400 || status === 400) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to status 400 (client error)`);
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to unary error (status: ${status || 'unknown'})`);
@@ -1059,7 +1153,11 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                 credentialMarkedUnhealthy = true;
             }
         }
-        
+
+        if (_applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error)) {
+            credentialMarkedUnhealthy = true;
+        }
+
         // 如果需要切换凭证（无论是否标记不健康），都设置标记以触发重试
         if (shouldSwitchCredential && !credentialMarkedUnhealthy) {
             credentialMarkedUnhealthy = true; // 触发下面的重试逻辑
@@ -1068,8 +1166,9 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         // 凭证已被标记为不健康后，尝试切换到新凭证重试
         // 不再依赖状态码判断，只要凭证被标记不健康且可以重试，就尝试切换
         if (credentialMarkedUnhealthy && currentRetry < maxRetries && providerPoolManager && CONFIG) {
-            // 增加10秒内的随机等待时间，避免所有请求同时切换凭证
-            const randomDelay = Math.floor(Math.random() * 10000); // 0-10000毫秒
+            // Small jitter to avoid stampede when multiple concurrent requests switch at once.
+            // 500ms max is sufficient — 10s was causing 1-2 minute stalls with 10 retries.
+            const randomDelay = Math.floor(Math.random() * 500); // 0-500ms
             logger.info(`[Unary Retry] Credential marked unhealthy. Waiting ${randomDelay}ms before retry ${currentRetry + 1}/${maxRetries} with different credential...`);
             await new Promise(resolve => setTimeout(resolve, randomDelay));
             
@@ -1087,7 +1186,8 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                         ...retryContext,
                         CONFIG,
                         currentRetry: currentRetry + 1,
-                        maxRetries
+                        maxRetries,
+                        isFallback: result.isFallback || retryContext?.isFallback || false
                     };
                     
                     // 递归调用，使用新的服务
@@ -1205,9 +1305,13 @@ export async function handleModelListRequest(req, res, service, endpointType, CO
             return { data: [] };
         };
 
-        // --- 核心逻辑: auto 路由模式下的模型聚合 ---
-        if (CONFIG.MODEL_PROVIDER === MODEL_PROVIDER.AUTO && providerPoolManager) {
-            logger.info(`[ModelList] Aggregating models for 'auto' mode...`);
+        // --- 核心逻辑: 路由模式下的模型聚合 ---
+        // 当处于 auto 模式，或者配置了多个默认提供商时，执行聚合
+        const isMultiProvider = CONFIG.MODEL_PROVIDER === MODEL_PROVIDER.AUTO ||
+                               (Array.isArray(CONFIG.DEFAULT_MODEL_PROVIDERS) && CONFIG.DEFAULT_MODEL_PROVIDERS.length > 1);
+
+        if (isMultiProvider && providerPoolManager) {
+            logger.info(`[ModelList] Aggregating models for multi-provider mode...`);
             clientModelList = await providerPoolManager.getAllAvailableModels(endpointType);
         } else {
             // --- 单提供商逻辑 ---
@@ -1332,7 +1436,10 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
 
     logger.info(`[Content Generation] Model: ${model}, Stream: ${isStream}`);
 
+
     let actualCustomName = CONFIG.customName;
+
+    let isFallbackUsed = false;
 
     // 2.5. 根据模型选择服务适配器：
     // - service 缺失时（例如上游未预先注入）进行兜底选择
@@ -1352,10 +1459,12 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         if (result.actualModel && result.actualModel !== model) {
             logger.info(`[Content Generation] Model Fallback: ${model} -> ${result.actualModel}`);
             model = result.actualModel;
+            isFallbackUsed = true;
         }
 
         if (result.isFallback) {
             logger.info(`[Content Generation] Fallback activated: ${CONFIG.MODEL_PROVIDER} -> ${toProvider} (uuid: ${actualUuid})`);
+            isFallbackUsed = true;
         } else {
             logger.info(`[Content Generation] Selected service adapter based on model: ${model}`);
         }
@@ -1413,14 +1522,14 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
     
     // 5. Call the appropriate stream or unary handler, passing the provider info.
     // 创建重试上下文，包含 CONFIG 以便在认证错误时切换凭证重试
-    // 凭证切换重试次数（默认 5），可在配置中自定义更大的值
-    // 注意：这与底层的 429/5xx 重试（REQUEST_MAX_RETRIES）是不同层次的重试机制
-    // - 底层重试：同一凭证遇到 429/5xx 时的重试
-    // - 凭证切换重试：凭证被标记不健康后切换到其他凭证
-    // 当没有不同的健康凭证可用时，重试会自动停止
     const credentialSwitchMaxRetries = CONFIG.CREDENTIAL_SWITCH_MAX_RETRIES || 5;
-    const retryContext = { CONFIG, currentRetry: 0, maxRetries: credentialSwitchMaxRetries };
-    
+    const retryContext = {
+        CONFIG,
+        currentRetry: 0,
+        maxRetries: credentialSwitchMaxRetries,
+        isFallback: isFallbackUsed
+    };
+
     if (isStream) {
         await handleStreamRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, actualUuid, actualCustomName, retryContext);
     } else {
