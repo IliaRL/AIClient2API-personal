@@ -390,8 +390,11 @@ function appendCustomModelsToModelList(clientModelList, customEntries, providerT
  */
 export async function updateLastModelFile(model) {
     try {
-        const maxOutput = MODEL_MAX_OUTPUT_TOKENS[model] ?? GEMINI_DEFAULT_MAX_TOKENS;
-        const contextWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200000;
+        // Strip OpenRouter-style variant suffixes like :free, :nitro, :beta
+        // e.g. "openai/gpt-oss-120b:free" -> "openai/gpt-oss-120b"
+        const baseModelId = model.replace(/:[^/]+$/, '');
+        const maxOutput = MODEL_MAX_OUTPUT_TOKENS[model] ?? MODEL_MAX_OUTPUT_TOKENS[baseModelId] ?? GEMINI_DEFAULT_MAX_TOKENS;
+        const contextWindow = MODEL_CONTEXT_WINDOWS[model] ?? MODEL_CONTEXT_WINDOWS[baseModelId] ?? 200000;
         await fs.writeFile('/tmp/aiclient_last_model', JSON.stringify({ model, maxOutput, contextWindow }));
     } catch (err) {
         // Silently ignore errors

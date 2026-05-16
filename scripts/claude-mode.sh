@@ -27,6 +27,7 @@ fi
 
 CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
 CLAUDE_PROXY_BACKUP_FILE="${CLAUDE_PROXY_BACKUP_FILE:-$HOME/.claude/proxy_settings_backup.json}"
+ANTIGRAVITY_SETTINGS_FILE="${ANTIGRAVITY_SETTINGS_FILE:-$HOME/Library/Application Support/Antigravity/User/profiles/-1cd01272/settings.json}"
 
 # Single source of truth for the proxy address/token. Override via env before sourcing.
 : "${AICLIENT_BASE:=http://127.0.0.1:3000}"
@@ -74,6 +75,12 @@ _claude_mode_write_settings() {
     jq --arg base "$base" --arg token "$token" --arg model "$PROXY_CLI_MODEL" \
       '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_AUTH_TOKEN = $token | .model = $model' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
+    # Also sync Antigravity IDE settings to proxy model
+    if [ -f "$ANTIGRAVITY_SETTINGS_FILE" ]; then
+      local ag_tmp="${ANTIGRAVITY_SETTINGS_FILE}.tmp.$$"
+      jq --arg model "$PROXY_CLI_MODEL" '.["claude.model"] = $model' \
+        "$ANTIGRAVITY_SETTINGS_FILE" >"$ag_tmp" && mv "$ag_tmp" "$ANTIGRAVITY_SETTINGS_FILE"
+    fi
   else
     # Restore native model from backup (default to NATIVE_CLI_MODEL if backup missing).
     local native_model
@@ -82,6 +89,12 @@ _claude_mode_write_settings() {
     jq --arg m "$native_model" \
       'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN)) else . end | .model = $m' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
+    # Also sync Antigravity IDE settings to native model
+    if [ -f "$ANTIGRAVITY_SETTINGS_FILE" ]; then
+      local ag_tmp="${ANTIGRAVITY_SETTINGS_FILE}.tmp.$$"
+      jq --arg model "$native_model" '.["claude.model"] = $model' \
+        "$ANTIGRAVITY_SETTINGS_FILE" >"$ag_tmp" && mv "$ag_tmp" "$ANTIGRAVITY_SETTINGS_FILE"
+    fi
   fi
 }
 
