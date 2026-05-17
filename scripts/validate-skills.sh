@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# validate-skills.sh — assert that every skill reference is still accurate
+# Run after any system change. All assertions must pass before running aiclient-sync.
+# To add a new assertion: append to the relevant section below.
+
+SRC="/Users/ilialiston/AIClient2API/src"
+PASS=0
+FAIL=0
+
+check() {
+  local skill="$1" desc="$2" cmd="$3"
+  if eval "$cmd" > /dev/null 2>&1; then
+    echo "  ✅  [$skill] $desc"
+    ((PASS++))
+  else
+    echo "  ❌  [$skill] $desc"
+    echo "       CMD: $cmd"
+    ((FAIL++))
+  fi
+}
+
+echo ""
+echo "=== AIClient2API Skill Reference Validation ==="
+echo ""
+
+# ── aiclient-health ──────────────────────────────────────────────────────────
+echo "[ aiclient-health ]"
+check "health" "_applyBadRequestCooldown in request-handlers.js" \
+  "grep -q '_applyBadRequestCooldown' '$SRC/utils/request-handlers.js'"
+check "health" "PROVIDER_MAPPINGS in provider-utils.js:14" \
+  "grep -n 'PROVIDER_MAPPINGS' '$SRC/utils/provider-utils.js' | head -1 | grep -q '14:'"
+check "health" "gemini-antigravity defaultCheckModel = gemini-3-flash" \
+  "grep -A2 'gemini-antigravity' '$SRC/utils/provider-utils.js' | grep -q 'gemini-3-flash'"
+check "health" "nvidia-nim defaultCheckModel = meta/llama-3.3-70b-instruct" \
+  "grep -A2 'nvidia-nim' '$SRC/utils/provider-utils.js' | grep -q 'llama-3.3-70b'"
+check "health" "getDb in db.js (SQLite persistence)" \
+  "grep -q 'export function getDb\|export const getDb' '$SRC/utils/db.js'"
+
+# ── aiclient-models ──────────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-models ]"
+check "models" "PROVIDER_MODELS exported from provider-models.js" \
+  "grep -q 'export.*PROVIDER_MODELS\|PROVIDER_MODELS.*=' '$SRC/providers/provider-models.js'"
+check "models" "MODEL_CONTEXT_WINDOWS in converters/utils.js" \
+  "grep -q 'MODEL_CONTEXT_WINDOWS' '$SRC/converters/utils.js'"
+check "models" "MODEL_MAX_OUTPUT_TOKENS in converters/utils.js" \
+  "grep -q 'MODEL_MAX_OUTPUT_TOKENS' '$SRC/converters/utils.js'"
+check "models" "updateLastModelFile in request-handlers.js (not common.js)" \
+  "grep -q 'updateLastModelFile' '$SRC/utils/request-handlers.js'"
+
+# ── aiclient-routing ─────────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-routing ]"
+check "routing" "_resolveEffectiveRouting in service-manager.js:376" \
+  "grep -n '_resolveEffectiveRouting' '$SRC/services/service-manager.js' | head -1 | grep -q '376:'"
+check "routing" "getApiServiceWithFallback in service-manager.js" \
+  "grep -q 'getApiServiceWithFallback' '$SRC/services/service-manager.js'"
+check "routing" "selectProvider in provider-pool-manager.js" \
+  "grep -q 'selectProvider' '$SRC/providers/provider-pool-manager.js'"
+check "routing" "normalizeConfiguredProviders in config-manager.js:12" \
+  "grep -n 'normalizeConfiguredProviders' '$SRC/core/config-manager.js' | head -1 | grep -q '12:'"
+check "routing" "handleAPIRequests in api-manager.js:32" \
+  "grep -n 'handleAPIRequests' '$SRC/services/api-manager.js' | head -1 | grep -q '32:'"
+check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:483" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '483:'"
+check "routing" "handleModelListRequest in request-handlers.js (model aggregation)" \
+  "grep -q 'handleModelListRequest' '$SRC/utils/request-handlers.js'"
+
+# ── aiclient-statusline ───────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-statusline ]"
+check "statusline" "updateLastModelFile writes /tmp/aiclient_last_model at request-handlers.js:281" \
+  "grep -n 'aiclient_last_model' '$SRC/utils/request-handlers.js' | head -1 | grep -q '281:'"
+check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:483" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '483:'"
+check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:729" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '729:'"
+
+# ── aiclient-debug ────────────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-debug ]"
+check "debug" "handleModelListRequest in request-handlers.js (aggregation entry)" \
+  "grep -q 'handleModelListRequest' '$SRC/utils/request-handlers.js'"
+check "debug" "PROMPT_LOG_MODE key exists in config.json" \
+  "grep -q 'PROMPT_LOG_MODE' '/Users/ilialiston/AIClient2API/configs/config.json'"
+
+# ── aiclient-tooluse ──────────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-tooluse ]"
+check "tooluse" "flattenToolArguments in converters/utils.js" \
+  "grep -q 'flattenToolArguments' '$SRC/converters/utils.js'"
+check "tooluse" "cleanJsonSchemaProperties in OpenAIConverter.js" \
+  "grep -q 'cleanJsonSchema' '$SRC/converters/strategies/OpenAIConverter.js'"
+check "tooluse" "geminiToAntigravity in antigravity-core.js" \
+  "grep -q 'geminiToAntigravity' '$SRC/providers/gemini/antigravity-core.js'"
+check "tooluse" "buildCodewhispererRequest in claude-kiro.js ~:1047" \
+  "grep -n 'buildCodewhispererRequest' '$SRC/providers/claude/claude-kiro.js' | awk -F: '{if(\$1>=1020 && \$1<=1080) found=1} END{exit !found}'"
+check "tooluse" "tools without descriptions dropped at kiro :1169" \
+  "grep -n 'description' '$SRC/providers/claude/claude-kiro.js' | awk -F: '{if(\$1>=1150 && \$1<=1200) found=1} END{exit !found}'"
+
+# ── aiclient-preflight ────────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-preflight ]"
+check "preflight" "registerAdapter calls in adapter.js:704+" \
+  "grep -n 'registerAdapter' '$SRC/providers/adapter.js' | sed -n '2p' | grep -q '704:'"
+check "preflight" "getServiceAdapter in adapter.js:756" \
+  "grep -n 'getServiceAdapter' '$SRC/providers/adapter.js' | head -1 | grep -q '756:'"
+check "preflight" "registerAllConverters in register-converters.js" \
+  "grep -q 'registerAllConverters' '$SRC/converters/register-converters.js'"
+check "preflight" "flattenToolArguments exported from converters/utils.js" \
+  "grep -q 'export.*flattenToolArguments\|flattenToolArguments.*export' '$SRC/converters/utils.js'"
+check "preflight" "WAL pragma present in db.js" \
+  "grep -q 'WAL\|wal_mode\|journal_mode' '$SRC/utils/db.js'"
+check "preflight" "request-handlers.js exists (🟡 High risk)" \
+  "test -f '$SRC/utils/request-handlers.js'"
+check "preflight" "error-handling.js exists (🟡 High risk)" \
+  "test -f '$SRC/utils/error-handling.js'"
+check "preflight" "cooldown-manager.js exists (🟡 High risk)" \
+  "test -f '$SRC/providers/cooldown-manager.js'"
+check "preflight" "persistence-manager.js exists (🟡 High risk)" \
+  "test -f '$SRC/providers/persistence-manager.js'"
+check "preflight" "common.js is a barrel (≤15 lines)" \
+  "[ \$(wc -l < '$SRC/utils/common.js') -le 15 ]"
+
+# ── aiclient-providers ────────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-providers ]"
+check "providers" "registerAdapter calls in adapter.js:704+" \
+  "grep -n 'registerAdapter' '$SRC/providers/adapter.js' | sed -n '2p' | grep -q '704:'"
+check "providers" "refreshToken check in provider-pool-manager.js:491" \
+  "grep -n 'refreshToken' '$SRC/providers/provider-pool-manager.js' | awk -F: '{if(\$1>=480 && \$1<=505) found=1} END{exit !found}'"
+check "providers" "DEFAULT_HEALTH_CHECK_MODELS in provider-pool-manager.js:51" \
+  "grep -n 'DEFAULT_HEALTH_CHECK_MODELS' '$SRC/providers/provider-pool-manager.js' | head -1 | grep -q '51:'"
+check "providers" "PROVIDER_MAPPINGS in provider-utils.js:14" \
+  "grep -n 'PROVIDER_MAPPINGS' '$SRC/utils/provider-utils.js' | head -1 | grep -q '14:'"
+check "providers" "normalizeConfiguredProviders in config-manager.js:12" \
+  "grep -n 'normalizeConfiguredProviders' '$SRC/core/config-manager.js' | head -1 | grep -q '12:'"
+check "providers" "OpenAIConverter.js exists" \
+  "test -f '$SRC/converters/strategies/OpenAIConverter.js'"
+check "providers" "ClaudeConverter.js exists" \
+  "test -f '$SRC/converters/strategies/ClaudeConverter.js'"
+
+# ── aiclient-credentials ──────────────────────────────────────────────────────
+echo ""
+echo "[ aiclient-credentials ]"
+check "credentials" "refreshToken check in provider-pool-manager.js:491" \
+  "grep -n 'refreshToken' '$SRC/providers/provider-pool-manager.js' | awk -F: '{if(\$1>=480 && \$1<=505) found=1} END{exit !found}'"
+check "credentials" "codex-oauth.js exists (OAuth-but-no-needsReauth)" \
+  "test -f '$SRC/auth/codex-oauth.js'"
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+echo ""
+echo "================================================"
+echo "  PASSED: $PASS   FAILED: $FAIL"
+echo "================================================"
+echo ""
+
+if [ $FAIL -gt 0 ]; then
+  echo "ACTION REQUIRED: Run /aiclient-sync and load superpowers:writing-skills"
+  echo "to fix each ❌ before the skills are considered accurate."
+  echo ""
+  exit 1
+fi
