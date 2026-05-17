@@ -1,9 +1,7 @@
 // request-handlers.js — HTTP request orchestration extracted from common.js
 // Owns: stream/unary content generation, model list, request dispatching,
 //       last-model file updates, system-prompt management glue.
-// Error handlers (createErrorResponse / createStreamErrorResponse) are
-// duplicated here temporarily; they will be sourced from error-handling.js
-// once Task 9 lands.
+// Error formatters live in error-handling.js and are imported below.
 
 import { promises as fs } from 'fs';
 import logger from './logger.js';
@@ -38,7 +36,7 @@ import {
     getCustomModelListProvider,
     normalizeModelIds,
 } from '../providers/provider-models.js';
-import { handleError } from './common.js';
+import { handleError, createErrorResponse, createStreamErrorResponse } from './error-handling.js';
 
 // ==================== Private helpers (handler-internal) ====================
 
@@ -265,162 +263,6 @@ function _applyCustomModelParameters(requestBody, customConfig, provider) {
             }
         }
     });
-}
-
-// ==================== Temporary error formatters ====================
-// These will move into error-handling.js in Task 9; request-handlers will
-// re-import them from there once that module exists.
-
-function createErrorResponse(error, fromProvider) {
-    const protocolPrefix = getProtocolPrefix(fromProvider);
-    const rawStatusCode = error.status || error.code || 500;
-    const statusCode = ensureValidStatusCode(rawStatusCode);
-    const errorMessage = error.message || "An error occurred during processing.";
-
-    const getErrorType = (code) => {
-        if (code === 401) return 'authentication_error';
-        if (code === 403) return 'permission_error';
-        if (code === 429) return 'rate_limit_error';
-        if (code >= 500) return 'server_error';
-        return 'invalid_request_error';
-    };
-
-    const getGeminiStatus = (code) => {
-        if (code === 400) return 'INVALID_ARGUMENT';
-        if (code === 401) return 'UNAUTHENTICATED';
-        if (code === 403) return 'PERMISSION_DENIED';
-        if (code === 404) return 'NOT_FOUND';
-        if (code === 429) return 'RESOURCE_EXHAUSTED';
-        if (code >= 500) return 'INTERNAL';
-        return 'UNKNOWN';
-    };
-
-    switch (protocolPrefix) {
-        case MODEL_PROTOCOL_PREFIX.OPENAI:
-            return {
-                error: {
-                    message: errorMessage,
-                    type: getErrorType(statusCode),
-                    code: getErrorType(statusCode)
-                }
-            };
-
-        case MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES:
-            return {
-                error: {
-                    type: getErrorType(statusCode),
-                    message: errorMessage,
-                    code: getErrorType(statusCode)
-                }
-            };
-
-        case MODEL_PROTOCOL_PREFIX.CLAUDE:
-            return {
-                type: "error",
-                error: {
-                    type: getErrorType(statusCode),
-                    message: errorMessage
-                }
-            };
-
-        case MODEL_PROTOCOL_PREFIX.GEMINI:
-            return {
-                error: {
-                    code: statusCode,
-                    message: errorMessage,
-                    status: getGeminiStatus(statusCode)
-                }
-            };
-
-        default:
-            return {
-                error: {
-                    message: errorMessage,
-                    type: getErrorType(statusCode),
-                    code: getErrorType(statusCode)
-                }
-            };
-    }
-}
-
-function createStreamErrorResponse(error, fromProvider) {
-    const protocolPrefix = getProtocolPrefix(fromProvider);
-    const rawStatusCode = error.status || error.code || 500;
-    const statusCode = ensureValidStatusCode(rawStatusCode);
-    const errorMessage = error.message || "An error occurred during streaming.";
-
-    const getErrorType = (code) => {
-        if (code === 401) return 'authentication_error';
-        if (code === 403) return 'permission_error';
-        if (code === 429) return 'rate_limit_error';
-        if (code >= 500) return 'server_error';
-        return 'invalid_request_error';
-    };
-
-    const getGeminiStatus = (code) => {
-        if (code === 400) return 'INVALID_ARGUMENT';
-        if (code === 401) return 'UNAUTHENTICATED';
-        if (code === 403) return 'PERMISSION_DENIED';
-        if (code === 404) return 'NOT_FOUND';
-        if (code === 429) return 'RESOURCE_EXHAUSTED';
-        if (code >= 500) return 'INTERNAL';
-        return 'UNKNOWN';
-    };
-
-    switch (protocolPrefix) {
-        case MODEL_PROTOCOL_PREFIX.OPENAI:
-            const openaiError = {
-                error: {
-                    message: errorMessage,
-                    type: getErrorType(statusCode),
-                    code: null
-                }
-            };
-            return `data: ${JSON.stringify(openaiError)}\n\n`;
-
-        case MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES:
-            const responsesError = {
-                id: `resp_${Date.now()}`,
-                object: "error",
-                created: Math.floor(Date.now() / 1000),
-                error: {
-                    type: getErrorType(statusCode),
-                    message: errorMessage,
-                    code: getErrorType(statusCode)
-                }
-            };
-            return `event: error\ndata: ${JSON.stringify(responsesError)}\n\n`;
-
-        case MODEL_PROTOCOL_PREFIX.CLAUDE:
-            const claudeError = {
-                type: "error",
-                error: {
-                    type: getErrorType(statusCode),
-                    message: errorMessage
-                }
-            };
-            return `event: error\ndata: ${JSON.stringify(claudeError)}\n\n`;
-
-        case MODEL_PROTOCOL_PREFIX.GEMINI:
-            const geminiError = {
-                error: {
-                    code: statusCode,
-                    message: errorMessage,
-                    status: getGeminiStatus(statusCode)
-                }
-            };
-            return `data: ${JSON.stringify(geminiError)}\n\n`;
-
-        default:
-            const defaultError = {
-                error: {
-                    message: errorMessage,
-                    type: getErrorType(statusCode),
-                    code: null
-                }
-            };
-            return `data: ${JSON.stringify(defaultError)}\n\n`;
-    }
 }
 
 // ==================== Exported handlers ====================
