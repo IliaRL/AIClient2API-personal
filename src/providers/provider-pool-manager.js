@@ -1,9 +1,7 @@
 import * as fs from 'fs';
-import { getDb } from '../utils/db.js';
 import { getServiceAdapter, getRegisteredProviders, invalidateServiceAdapter } from './adapter.js';
 import logger from '../utils/logger.js';
 import { MODEL_PROVIDER, getProtocolPrefix } from '../utils/common.js';
-import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 import { convertData } from '../convert/convert.js';
 
 import {
@@ -14,6 +12,8 @@ import {
 } from './provider-models.js';
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { ENDPOINT_TYPE } from '../utils/common.js';
+import { CooldownManager } from './cooldown-manager.js';
+import { initDb, persistHealthToDb, overlayHealthFromDb, debouncedSave, flushPendingSaves } from './persistence-manager.js';
 
 function getCustomModelAliasesForProvider(config, providerType) {
     const customModels = Array.isArray(config?.customModels) ? config.customModels : [];
@@ -116,9 +116,9 @@ export class ProviderPoolManager {
         this._selectionSequence = 0;
 
         // 模型临时冷却：当某个 providerType 在某模型上连续返回 400 时，临时把该模型从该提供商池排除
-        // Map<providerType, Map<modelName, expiryTimestampMs>>
-        this._modelCooldowns = new Map();
+        // Delegated to CooldownManager
         this.modelCooldownDurationMs = options.globalConfig?.MODEL_COOLDOWN_MS ?? 300000; // 5 分钟
+        this._cooldownManager = new CooldownManager(this.modelCooldownDurationMs);
 
         // SQLite pool state — prepared statements cached after first init
         this._db = null;
@@ -1205,13 +1205,7 @@ export class ProviderPoolManager {
      * @param {number} [durationMs] - 冷却时长，默认 modelCooldownDurationMs
      */
     markModelCooldown(providerType, model, durationMs) {
-        if (!providerType || !model) return;
-        const expiry = Date.now() + (durationMs || this.modelCooldownDurationMs);
-        if (!this._modelCooldowns.has(providerType)) {
-            this._modelCooldowns.set(providerType, new Map());
-        }
-        this._modelCooldowns.get(providerType).set(model, expiry);
-        this._log('warn', `[Model Cooldown] ${providerType} :: ${model} cooled down until ${new Date(expiry).toISOString()}`);
+        this._cooldownManager.mark(providerType, model, durationMs, this._log.bind(this));
     }
 
     /**
@@ -1219,28 +1213,14 @@ export class ProviderPoolManager {
      * 同时会清理已过期的条目。
      */
     isModelOnCooldown(providerType, model) {
-        if (!providerType || !model) return false;
-        const typeMap = this._modelCooldowns.get(providerType);
-        if (!typeMap) return false;
-        const expiry = typeMap.get(model);
-        if (!expiry) return false;
-        if (Date.now() >= expiry) {
-            typeMap.delete(model);
-            if (typeMap.size === 0) this._modelCooldowns.delete(providerType);
-            return false;
-        }
-        return true;
+        return this._cooldownManager.isOnCooldown(providerType, model);
     }
 
     /**
      * 清除某 model 的冷却（用于测试或手动恢复）。
      */
     clearModelCooldown(providerType, model) {
-        const typeMap = this._modelCooldowns.get(providerType);
-        if (!typeMap) return;
-        if (model) typeMap.delete(model);
-        else typeMap.clear();
-        if (typeMap.size === 0) this._modelCooldowns.delete(providerType);
+        this._cooldownManager.clear(providerType, model);
     }
 
     /**
@@ -2391,55 +2371,9 @@ export class ProviderPoolManager {
     // ─── SQLite health-state persistence ────────────────────────────────────────
 
     _initDb() {
-        try {
-            this._db = getDb();
-            this._stmts = {
-                upsertAccount: this._db.prepare(`
-                    INSERT INTO accounts (
-                        provider_type, account_index, uuid,
-                        is_healthy, last_error_time, last_error_message,
-                        needs_refresh, error_count, scheduled_recovery_time
-                    ) VALUES (
-                        @provider_type, @account_index, @uuid,
-                        @is_healthy, @last_error_time, @last_error_message,
-                        @needs_refresh, @error_count, @scheduled_recovery_time
-                    )
-                    ON CONFLICT(provider_type, account_index) DO UPDATE SET
-                        uuid                    = excluded.uuid,
-                        is_healthy              = excluded.is_healthy,
-                        last_error_time         = excluded.last_error_time,
-                        last_error_message      = excluded.last_error_message,
-                        needs_refresh           = excluded.needs_refresh,
-                        error_count             = excluded.error_count,
-                        scheduled_recovery_time = excluded.scheduled_recovery_time
-                `),
-                getAccountId: this._db.prepare(
-                    `SELECT id FROM accounts WHERE provider_type = ? AND account_index = ?`
-                ),
-                getAccountByUuid: this._db.prepare(
-                    `SELECT id, account_index FROM accounts WHERE provider_type = ? AND uuid = ?`
-                ),
-                upsertCooldown: this._db.prepare(`
-                    INSERT INTO model_cooldowns (account_id, model, expires_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(account_id, model) DO UPDATE SET expires_at = excluded.expires_at
-                `),
-                getCooldowns: this._db.prepare(
-                    `SELECT model, expires_at FROM model_cooldowns WHERE account_id = ?`
-                ),
-                deleteCooldown: this._db.prepare(
-                    `DELETE FROM model_cooldowns WHERE account_id = ? AND model = ?`
-                ),
-                getHealthOverlay: this._db.prepare(
-                    `SELECT * FROM accounts WHERE provider_type = ?`
-                ),
-            };
-            this._log('info', 'SQLite pool state DB initialised');
-        } catch (err) {
-            this._log('warn', `SQLite init failed — falling back to JSON-only mode: ${err.message}`);
-            this._db = null;
-            this._stmts = null;
-        }
+        const { db, stmts } = initDb(this._log.bind(this));
+        this._db = db;
+        this._stmts = stmts;
     }
 
     _getAccountIndex(providerType, uuid) {
@@ -2447,165 +2381,26 @@ export class ProviderPoolManager {
         return pool.findIndex(p => p.uuid === uuid);
     }
 
-    _parseTimestamp(value) {
-        if (!value) return null;
-        if (typeof value === 'number') return value;
-        const ms = Date.parse(value);
-        return Number.isNaN(ms) ? null : ms;
-    }
-
     _persistHealthToDb(providerType, providerConfig, accountIndex) {
-        if (!this._db || !this._stmts || accountIndex < 0) return;
-        try {
-            this._stmts.upsertAccount.run({
-                provider_type:           providerType,
-                account_index:           accountIndex,
-                uuid:                    providerConfig.uuid || null,
-                is_healthy:              providerConfig.isHealthy !== false ? 1 : 0,
-                last_error_time:         this._parseTimestamp(providerConfig.lastErrorTime),
-                last_error_message:      providerConfig.lastErrorMessage || null,
-                needs_refresh:           providerConfig.needsRefresh ? 1 : 0,
-                error_count:             providerConfig.errorCount || 0,
-                scheduled_recovery_time: this._parseTimestamp(providerConfig.scheduledRecoveryTime),
-            });
-        } catch (err) {
-            this._log('warn', `SQLite health persist failed for ${providerType}[${accountIndex}]: ${err.message}`);
-        }
+        persistHealthToDb(this._db, this._stmts, providerType, providerConfig, accountIndex, this._log.bind(this));
     }
 
     _overlayHealthFromDb() {
-        if (!this._db || !this._stmts) return;
-        try {
-            for (const providerType in this.providerStatus) {
-                const rows = this._stmts.getHealthOverlay.all(providerType);
-                if (rows.length === 0) continue;
-
-                const rowByUuid  = new Map(rows.filter(r => r.uuid).map(r => [r.uuid, r]));
-                const rowByIndex = new Map(rows.map(r => [r.account_index, r]));
-
-                const pool = this.providerStatus[providerType];
-                pool.forEach((providerItem, idx) => {
-                    const config = providerItem.config;
-                    const row = (config.uuid && rowByUuid.get(config.uuid)) || rowByIndex.get(idx);
-                    if (!row) return;
-
-                    config.isHealthy              = row.is_healthy === 1;
-                    config.errorCount             = row.error_count || 0;
-                    config.needsRefresh           = row.needs_refresh === 1;
-                    config.lastErrorTime          = row.last_error_time
-                        ? new Date(row.last_error_time).toISOString() : null;
-                    config.lastErrorMessage       = row.last_error_message || null;
-                    config.scheduledRecoveryTime  = row.scheduled_recovery_time
-                        ? new Date(row.scheduled_recovery_time).toISOString() : null;
-
-                    const accountRow = this._stmts.getAccountId.get(providerType, row.account_index);
-                    if (accountRow) {
-                        const cooldowns = this._stmts.getCooldowns.all(accountRow.id);
-                        const now = Date.now();
-                        if (!config.modelCooldowns || typeof config.modelCooldowns !== 'object' || Array.isArray(config.modelCooldowns)) config.modelCooldowns = {};
-                        for (const cd of cooldowns) {
-                            if (cd.expires_at > now) {
-                                config.modelCooldowns[cd.model] = new Date(cd.expires_at).toISOString();
-                            }
-                        }
-                    }
-                });
-            }
-            this._log('info', 'Health state overlaid from SQLite');
-        } catch (err) {
-            this._log('warn', `SQLite health overlay failed: ${err.message}`);
-        }
+        overlayHealthFromDb(this._db, this._stmts, this.providerStatus, this._log.bind(this));
     }
 
     // ────────────────────────────────────────────────────────────────────────────
 
-    /**
-     * 优化1: 添加防抖保存方法
-     * 延迟保存操作，避免频繁的文件 I/O
-     * @private
-     */
     _debouncedSave(providerType) {
-        // 将待保存的 providerType 添加到集合中
-        this.pendingSaves.add(providerType);
-        
-        // 清除之前的定时器
-        if (this.saveTimer) {
-            clearTimeout(this.saveTimer);
-        }
-        
-        // 设置新的定时器
-        this.saveTimer = setTimeout(() => {
-            this._flushPendingSaves();
-        }, this.saveDebounceTime);
+        const state = { pendingSaves: this.pendingSaves, saveTimer: this.saveTimer, saveDebounceTime: this.saveDebounceTime };
+        debouncedSave(providerType, state, () => this._flushPendingSaves());
+        this.saveTimer = state.saveTimer;
     }
     
-    /**
-     * 批量保存所有待保存的 providerType（优化为单次文件写入）
-     * @private
-     */
     async _flushPendingSaves() {
-        // 立即置空定时器，防止重叠调用
-        if (this.saveTimer) {
-            clearTimeout(this.saveTimer);
-            this.saveTimer = null;
-        }
-
-        const filePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
-        
-        // 使用文件锁确保并发安全
-        await withFileLock(filePath, async (checkValidity) => {
-            // 原子化提取待保存任务并清空，防止在异步循环期间丢失新更新
-            const typesToSave = Array.from(this.pendingSaves);
-            if (typesToSave.length === 0) return;
-            this.pendingSaves.clear();
-
-            try {
-                let currentPools = {};
-
-                // 采用“读取-合并-写入”策略，保留可能存在的未知字段
-                try {
-                    const fileContent = await fs.promises.readFile(filePath, 'utf8');
-                    currentPools = JSON.parse(fileContent);
-                } catch (readError) {
-                    if (readError.code === 'ENOENT') {
-                        this._log('info', 'configs/provider_pools.json does not exist, creating new file.');
-                    } else {
-                        throw readError;
-                    }
-                }
-
-                // 检查锁是否依然有效
-                checkValidity();
-
-                // 更新所有待保存的 providerType
-                for (const providerType of typesToSave) {
-                    if (this.providerStatus[providerType]) {
-                        currentPools[providerType] = this.providerStatus[providerType].map(p => {
-                            const config = { ...p.config };
-                            if (config.lastUsed instanceof Date) {
-                                config.lastUsed = config.lastUsed.toISOString();
-                            }
-                            if (config.lastErrorTime instanceof Date) {
-                                config.lastErrorTime = config.lastErrorTime.toISOString();
-                            }
-                            if (config.lastHealthCheckTime instanceof Date) {
-                                config.lastHealthCheckTime = config.lastHealthCheckTime.toISOString();
-                            }
-                            return config;
-                        });
-                    } else {
-                        this._log('warn', `Attempted to save unknown providerType: ${providerType}`);
-                    }
-                }
-
-                // 一次性写入文件（使用原子化写入）
-                await atomicWriteFile(filePath, JSON.stringify(currentPools, null, 2), { encoding: 'utf8', mode: 0o600 });
-
-                this._log('info', `configs/provider_pools.json updated successfully for types: ${typesToSave.join(', ')}`);
-            } catch (error) {
-                this._log('error', `Failed to write provider_pools.json: ${error.message}`);
-            }
-        });
+        const state = { pendingSaves: this.pendingSaves, saveTimer: this.saveTimer, saveDebounceTime: this.saveDebounceTime };
+        await flushPendingSaves(this.providerStatus, state, this.globalConfig, this._log.bind(this));
+        this.saveTimer = state.saveTimer;
     }
 
 }

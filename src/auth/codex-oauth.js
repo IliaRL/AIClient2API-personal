@@ -9,6 +9,7 @@ import { broadcastEvent } from '../services/ui-manager.js';
 import { autoLinkProviderConfigs } from '../services/service-manager.js';
 import { CONFIG } from '../core/config-manager.js';
 import { getProxyConfigForProvider } from '../utils/proxy-utils.js';
+import { sharedHttpAgent, sharedHttpsAgent } from '../utils/network-utils.js';
 
 /**
  * Codex OAuth 配置
@@ -78,7 +79,7 @@ class CodexAuth {
         this.config = config;
         
         // 配置代理支持
-        const axiosConfig = { timeout: 30000 };
+        const axiosConfig = { timeout: 30000, httpAgent: sharedHttpAgent, httpsAgent: sharedHttpsAgent };
         const proxyConfig = getProxyConfigForProvider(config, 'openai-codex-oauth');
         if (proxyConfig) {
             axiosConfig.httpAgent = proxyConfig.httpAgent;
