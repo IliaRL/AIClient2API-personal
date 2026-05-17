@@ -14,6 +14,7 @@ import {
 } from './provider-models.js';
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { ENDPOINT_TYPE } from '../utils/common.js';
+import { CooldownManager } from './cooldown-manager.js';
 
 function getCustomModelAliasesForProvider(config, providerType) {
     const customModels = Array.isArray(config?.customModels) ? config.customModels : [];
@@ -116,9 +117,9 @@ export class ProviderPoolManager {
         this._selectionSequence = 0;
 
         // 模型临时冷却：当某个 providerType 在某模型上连续返回 400 时，临时把该模型从该提供商池排除
-        // Map<providerType, Map<modelName, expiryTimestampMs>>
-        this._modelCooldowns = new Map();
+        // Delegated to CooldownManager
         this.modelCooldownDurationMs = options.globalConfig?.MODEL_COOLDOWN_MS ?? 300000; // 5 分钟
+        this._cooldownManager = new CooldownManager(this.modelCooldownDurationMs);
 
         // SQLite pool state — prepared statements cached after first init
         this._db = null;
@@ -1205,13 +1206,7 @@ export class ProviderPoolManager {
      * @param {number} [durationMs] - 冷却时长，默认 modelCooldownDurationMs
      */
     markModelCooldown(providerType, model, durationMs) {
-        if (!providerType || !model) return;
-        const expiry = Date.now() + (durationMs || this.modelCooldownDurationMs);
-        if (!this._modelCooldowns.has(providerType)) {
-            this._modelCooldowns.set(providerType, new Map());
-        }
-        this._modelCooldowns.get(providerType).set(model, expiry);
-        this._log('warn', `[Model Cooldown] ${providerType} :: ${model} cooled down until ${new Date(expiry).toISOString()}`);
+        this._cooldownManager.mark(providerType, model, durationMs, this._log.bind(this));
     }
 
     /**
@@ -1219,28 +1214,14 @@ export class ProviderPoolManager {
      * 同时会清理已过期的条目。
      */
     isModelOnCooldown(providerType, model) {
-        if (!providerType || !model) return false;
-        const typeMap = this._modelCooldowns.get(providerType);
-        if (!typeMap) return false;
-        const expiry = typeMap.get(model);
-        if (!expiry) return false;
-        if (Date.now() >= expiry) {
-            typeMap.delete(model);
-            if (typeMap.size === 0) this._modelCooldowns.delete(providerType);
-            return false;
-        }
-        return true;
+        return this._cooldownManager.isOnCooldown(providerType, model);
     }
 
     /**
      * 清除某 model 的冷却（用于测试或手动恢复）。
      */
     clearModelCooldown(providerType, model) {
-        const typeMap = this._modelCooldowns.get(providerType);
-        if (!typeMap) return;
-        if (model) typeMap.delete(model);
-        else typeMap.clear();
-        if (typeMap.size === 0) this._modelCooldowns.delete(providerType);
+        this._cooldownManager.clear(providerType, model);
     }
 
     /**
