@@ -725,7 +725,6 @@ export async function handleStreamRequest(res, service, model, requestBody, from
     let hasMessageStop = false; // 跟踪是否已经发送过结束标志（message_stop / done）
 
     try {
-        // fs.writeFile('request'+Date.now()+'.json', JSON.stringify(requestBody));
         // The service returns a stream in its native format (toProvider).
         const needsConversion = getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider);
         requestBody.model = model;
@@ -1057,8 +1056,6 @@ export async function handleStreamRequest(res, service, model, requestBody, from
         if (!isRetry) {
             await logConversation('output', fullResponseText, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
         }
-        // fs.writeFile('oldResponseChunk'+Date.now()+'.json', fullOldResponseJson);
-        // fs.writeFile('responseChunk'+Date.now()+'.json', fullResponseJson);
     }
 }
 
@@ -1074,7 +1071,6 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         // The service returns the response in its native format (toProvider).
         const needsConversion = getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider);
         requestBody.model = model;
-        // fs.writeFile('oldRequest'+Date.now()+'.json', JSON.stringify(requestBody));
         const nativeResponse = await service.generateContent(model, requestBody);
         const responseText = extractResponseText(nativeResponse, toProvider);
 
@@ -1110,8 +1106,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         };
         await handleUnifiedResponse(res, JSON.stringify(clientResponse), false, 200, metadata);
         await logConversation('output', responseText, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
-        // fs.writeFile('oldResponse'+Date.now()+'.json', JSON.stringify(clientResponse));
-        
+
         // 一元请求成功完成，统计使用次数，错误次数重置为0
         if (providerPoolManager && pooluuid) {
             const customNameDisplay = customName ? `, ${customName}` : '';
@@ -1490,7 +1485,6 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         processedRequestBody._requestBaseUrl = CONFIG.requestBaseUrl;
     }
 
-    // fs.writeFile('originalRequestBody'+Date.now()+'.json', JSON.stringify(originalRequestBody));
     if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider)) {
         logger.info(`[Request Convert] Converting request from ${fromProvider} to ${toProvider}`);
         const preConvertBody = processedRequestBody;
