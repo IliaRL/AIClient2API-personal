@@ -32,10 +32,10 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 ---
 
-## Current Verified Baseline (2026-05-16)
+## Current Verified Baseline (2026-05-17)
 
 - **40 models across 7 providers** — all verified live with 0 errors
-- **31 pool accounts** — gemini-cli-oauth accounts may be on transient 429 cooldown (auto-recovers in 30s, normal)
+- **32 pool accounts** — gemini-cli-oauth accounts may be on transient 429 cooldown (auto-recovers in 30s, normal)
 - **Port**: 3000 · **Bearer**: `sk-a60f3efdf9b97e63c84ab4a3583f9d1c`
 - **Restart**: `./scripts/safe-restart.sh` ONLY
 - **Memory**: `/Users/ilialiston/AIClient2API/.claude/agent-memory/aiclient-master-architect/`
@@ -250,17 +250,22 @@ When a session makes significant changes (models added/removed, routing fixed, p
 |---|---|---|
 | Static model catalog | `src/providers/provider-models.js` | `PROVIDER_MODELS` — sync only |
 | Adapter registry | `src/providers/adapter.js` | `:704` registerAdapter, `:756` getServiceAdapter |
-| Pool selection + cooldowns | `src/providers/provider-pool-manager.js` | `selectProvider`, `acquireSlotWithFallback` |
+| Pool selection + slots | `src/providers/provider-pool-manager.js` | `selectProvider`, `acquireSlotWithFallback` |
+| Model cooldowns (in-memory Map) | `src/providers/cooldown-manager.js` | `CooldownManager` — mark/isOnCooldown/clear |
+| SQLite persistence (health state) | `src/providers/persistence-manager.js` | `initDb`, `overlayHealthFromDb`, `flushPendingSaves` |
 | Request dispatch | `src/services/api-manager.js` | `:32` handleAPIRequests |
 | Model→provider resolution | `src/services/service-manager.js` | `:376` _resolveEffectiveRouting |
-| Fallback tracking | `src/utils/common.js` | `:1465` `model = result.actualModel` |
-| 400 cooldown | `src/utils/common.js` | `_applyBadRequestCooldown`, called at ~:910 (stream) + ~:1144 (unary) |
-| Model list aggregation | `src/utils/common.js` | `:1214` fires when cascade>1 or MODEL_PROVIDER==='auto' |
+| Stream + unary request handlers | `src/utils/request-handlers.js` | `handleStreamRequest`, `handleUnaryRequest`, `handleModelListRequest`, `handleContentGenerationRequest` |
+| 400 cooldown | `src/utils/request-handlers.js` | `_applyBadRequestCooldown` (called inside stream ~:910 + unary ~:1144) |
+| Error formatting + SSE errors | `src/utils/error-handling.js` | `handleError`, `createErrorResponse`, `createStreamErrorResponse` |
+| Shared keep-alive HTTP agents | `src/utils/network-utils.js` | `sharedHttpAgent`, `sharedHttpsAgent` — used by all static-key providers |
+| Retry + rate-limit helpers | `src/utils/network-utils.js` | `isRetryableNetworkError`, `getRetryAfterMs`, `getRateLimitCooldownRecoveryTime` |
+| common.js | `src/utils/common.js` | 12-line ESM barrel — re-exports all of the above; 54 importers use this path |
 | Context windows + max output | `src/converters/utils.js` | `MODEL_CONTEXT_WINDOWS`, `MODEL_MAX_OUTPUT_TOKENS` |
 | Tool-use shared utils | `src/converters/utils.js` | `flattenToolArguments` |
 | Antigravity core | `src/providers/gemini/antigravity-core.js` | `geminiToAntigravity()`, `callApi()`, `streamApi()` |
-| Kiro core | `src/providers/claude/claude-kiro.js` | `buildCodewhispererRequest()` ~:1047 |
-| OpenAI adapter (NIM, GitHub, OpenRouter) | `src/providers/openai/openai-core.js` | `timeout: 90000` — already applied |
+| Kiro core | `src/providers/claude/claude-kiro.js` | `buildCodewhispererRequest()` ~:1047 · **version must stay 0.11.63** (0.12.x breaks AWS) |
+| OpenAI adapter (NIM, GitHub, OpenRouter) | `src/providers/openai/openai-core.js` | `timeout: 90000` + keep-alive agents — already applied |
 | Health check config | `src/utils/provider-utils.js` | `:14` PROVIDER_MAPPINGS |
 | Cascade parsing | `src/core/config-manager.js` | `:12` normalizeConfiguredProviders |
 | Prompt logging | `configs/config.json` | `PROMPT_LOG_MODE: "file"` → `logs/prompt_log_*.log` |

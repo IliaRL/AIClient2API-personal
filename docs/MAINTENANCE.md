@@ -14,7 +14,7 @@ These customizations **must survive every upstream merge**. Verify each after me
 | File | Customization | Verification |
 |---|---|---|
 | `src/providers/provider-pool-manager.js:51-65` | `DEFAULT_HEALTH_CHECK_MODELS`: nvidia=`meta/llama-3.3-70b-instruct`, codex=`gpt-5.4` | `grep -n 'nvidia-nim\|openai-codex' src/providers/provider-pool-manager.js \| head -5` |
-| `src/providers/provider-pool-manager.js:2505` | SQLite overlay guard: `typeof config.modelCooldowns !== 'object' \|\| Array.isArray(...)` | `grep -n 'typeof config.modelCooldowns' src/providers/provider-pool-manager.js` |
+| `src/providers/persistence-manager.js:112` | SQLite overlay guard: `typeof config.modelCooldowns !== 'object' \|\| Array.isArray(...)` | `grep -n 'typeof config.modelCooldowns' src/providers/persistence-manager.js` |
 | `src/utils/provider-utils.js:55` | antigravity `defaultCheckModel: 'gemini-3-flash'` | `grep -n 'defaultCheckModel' src/utils/provider-utils.js` |
 | `src/utils/provider-utils.js:99` | nvidia `defaultCheckModel: 'meta/llama-3.3-70b-instruct'` | (same grep above) |
 | `src/providers/provider-models.js` | gemini-cli: 6 models (no gemma), antigravity: 5 models, github: 10 models, nvidia: 10 models | visual diff or `grep -c "'" src/providers/provider-models.js` |
