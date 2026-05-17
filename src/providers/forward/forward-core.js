@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { configureAxiosProxy, configureTLSSidecar, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
 import { isRetryableNetworkError, MODEL_PROVIDER, getRetryAfterMs } from '../../utils/common.js';
+import { sharedHttpAgent, sharedHttpsAgent } from '../../utils/network-utils.js';
 
 /**
  * ForwardApiService - A provider that forwards requests to a specified API endpoint.
@@ -35,8 +36,11 @@ export class ForwardApiService {
         const axiosConfig = {
             baseURL: this.baseUrl,
             headers,
+            // Shared keep-alive agents — see network-utils.js for rationale
+            httpAgent: sharedHttpAgent,
+            httpsAgent: sharedHttpsAgent,
         };
-        
+
         this.axiosInstance = axios.create(axiosConfig);
     }
 

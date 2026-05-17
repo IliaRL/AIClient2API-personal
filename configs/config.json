@@ -75,15 +75,15 @@
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-claude-opus-4-6-thinking": {
-      "targetModel": "anthropic/claude-opus-4-5",
-      "targetProviderType": "openai-custom"
+      "targetModel": "claude-sonnet-4-5-20250929",
+      "targetProviderType": "claude-kiro-oauth"
     },
     "claude-opus-4-5": {
-      "targetModel": "anthropic/claude-opus-4-5",
-      "targetProviderType": "openai-custom"
+      "targetModel": "gemini-claude-opus-4-6-thinking",
+      "targetProviderType": "gemini-antigravity"
     },
     "gemini-2.5-pro": {
-      "targetModel": "gemini-2.5-flash",
+      "targetModel": "gemini-3.1-pro-low",
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-3-flash-preview": {
@@ -91,7 +91,7 @@
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-3.1-flash-lite-preview": {
-      "targetModel": "gemini-2.5-flash-lite",
+      "targetModel": "gemini-3-flash",
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-3.1-pro-high": {
@@ -103,26 +103,18 @@
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-claude-sonnet-4-6": {
-      "targetModel": "gemini-2.5-flash",
-      "targetProviderType": "gemini-antigravity"
+      "targetModel": "claude-sonnet-4-5-20250929",
+      "targetProviderType": "claude-kiro-oauth"
     },
     "gemini-2.5-flash": {
       "targetModel": "gemini-3-flash",
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-3-flash": {
-      "targetModel": "gemini-2.5-flash-thinking",
+      "targetModel": "gemini-claude-sonnet-4-6",
       "targetProviderType": "gemini-antigravity"
     },
     "gemini-2.5-flash-thinking": {
-      "targetModel": "mistralai/mistral-large-2512",
-      "targetProviderType": "openai-custom"
-    },
-    "anthropic/claude-opus-4-5": {
-      "targetModel": "gemini-3.1-pro-high",
-      "targetProviderType": "gemini-antigravity"
-    },
-    "mistralai/mistral-large-2512": {
       "targetModel": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
       "targetProviderType": "nvidia-nim"
     },
@@ -143,15 +135,11 @@
       "targetProviderType": "nvidia-nim"
     },
     "moonshotai/kimi-k2.6": {
-      "targetModel": "deepseek-ai/deepseek-v4-pro",
-      "targetProviderType": "nvidia-nim"
-    },
-    "deepseek-ai/deepseek-v4-pro": {
       "targetModel": "openai/gpt-oss-120b",
       "targetProviderType": "nvidia-nim"
     },
     "openai/gpt-oss-120b": {
-      "targetModel": "gemini-2.5-flash",
+      "targetModel": "gemini-3-flash",
       "targetProviderType": "gemini-antigravity"
     },
     "gpt-4o": {
@@ -170,16 +158,10 @@
       "targetModel": "gemini-2.5-pro",
       "targetProviderType": "gemini-cli-oauth"
     },
-    "claude-haiku-4-5": [
-      {
-        "targetModel": "claude-sonnet-4-5",
-        "targetProviderType": "claude-kiro-oauth"
-      },
-      {
-        "targetModel": "gemini-claude-sonnet-4-6",
-        "targetProviderType": "gemini-antigravity"
-      }
-    ]
+    "claude-haiku-4-5": {
+      "targetModel": "claude-sonnet-4-5",
+      "targetProviderType": "claude-kiro-oauth"
+    }
   },
   "PROXY_URL": null,
   "PROXY_ENABLED_PROVIDERS": [],

@@ -1,5 +1,36 @@
 import * as http from 'http';
+import * as https from 'https';
 import logger from './logger.js';
+
+/**
+ * Shared keep-alive HTTP/HTTPS agents for static-key axios providers
+ * (OpenAI / OpenRouter / NVIDIA NIM / GitHub Models / OpenAI Responses /
+ * Forward / Claude custom). Node v19+ enables keepAlive on http.globalAgent
+ * by default, but axios.create() instantiates its own per-request agent
+ * unless explicitly given one — bypassing the global default and forcing a
+ * fresh TCP+TLS handshake on every call (~150–300 ms wasted per request).
+ *
+ * Reusing one bounded agent per protocol gives:
+ *   - persistent TCP/TLS sessions (lower request latency)
+ *   - bounded socket count (maxSockets prevents file-descriptor leaks)
+ *   - shared connection pool across providers that hit the same host
+ *
+ * Kiro and Antigravity have their own per-instance agents because they
+ * use different transport (google-auth-library / explicit Connection:close).
+ */
+export const sharedHttpAgent = new http.Agent({
+    keepAlive: true,
+    maxSockets: 100,
+    maxFreeSockets: 10,
+    timeout: 120000,
+});
+
+export const sharedHttpsAgent = new https.Agent({
+    keepAlive: true,
+    maxSockets: 100,
+    maxFreeSockets: 10,
+    timeout: 120000,
+});
 
 /**
  * 可重试的网络错误标识列表

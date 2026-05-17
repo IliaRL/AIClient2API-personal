@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { configureAxiosProxy, configureTLSSidecar, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
 import { isRetryableNetworkError, MODEL_PROVIDER, getRetryAfterMs } from '../../utils/common.js';
+import { sharedHttpAgent, sharedHttpsAgent } from '../../utils/network-utils.js';
 
 // Assumed OpenAI API specification service for interacting with third-party models
 export class OpenAIApiService {
@@ -24,8 +25,14 @@ export class OpenAIApiService {
                 'Authorization': `Bearer ${this.apiKey}`,
                 'User-Agent': 'AIClient2API/3.0.6 (GitHub Models Support)'
             },
+            timeout: 90000,
+            // Reuse a single keep-alive agent across all openai-custom / NIM /
+            // GitHub Models / OpenRouter instances. Saves the TCP+TLS handshake
+            // (~150–300 ms) on warm requests.
+            httpAgent: sharedHttpAgent,
+            httpsAgent: sharedHttpsAgent,
         };
-        
+
         this.axiosInstance = axios.create(axiosConfig);
     }
 

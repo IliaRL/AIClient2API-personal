@@ -96,11 +96,13 @@ export const MODEL_MAX_OUTPUT_TOKENS = {
     'meta/llama-4-maverick-17b-128e-instruct': 8192,
     'meta/llama-3.3-70b-instruct': 131072,
     'moonshotai/kimi-k2.6': 32768,
-    'minimaxai/minimax-m2.7': 32768,
-    'deepseek-ai/deepseek-v4-pro': 32768,
-    'mistralai/mistral-large-3-675b-instruct-2512': 32768,
     'mistralai/mistral-small-4-119b-2603': 32768,
     'openai/gpt-oss-120b': 32768,
+    // OpenRouter free-tier models (base IDs after :free suffix is stripped)
+    'openai/gpt-oss-20b': 16384,
+    'deepseek/deepseek-v4-flash': 32768,
+    'nvidia/nemotron-3-super-120b-a12b': 131072,
+    'nvidia/nemotron-3-nano-30b-a3b': 131072,
 };
 
 // =============================================================================
@@ -148,11 +150,13 @@ export const MODEL_CONTEXT_WINDOWS = {
     'meta/llama-4-maverick-17b-128e-instruct': 1048576,
     'meta/llama-3.3-70b-instruct': 131072,
     'moonshotai/kimi-k2.6': 131072,
-    'minimaxai/minimax-m2.7': 1000000,
-    'deepseek-ai/deepseek-v4-pro': 65536,
-    'mistralai/mistral-large-3-675b-instruct-2512': 131072,
     'mistralai/mistral-small-4-119b-2603': 131072,
     'openai/gpt-oss-120b': 128000,
+    // OpenRouter free-tier models (base IDs after :free suffix is stripped)
+    'openai/gpt-oss-20b': 128000,
+    'deepseek/deepseek-v4-flash': 128000,
+    'nvidia/nemotron-3-super-120b-a12b': 128000,
+    'nvidia/nemotron-3-nano-30b-a3b': 128000,
 };
 
 /**

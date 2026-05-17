@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { configureAxiosProxy, configureTLSSidecar, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
 import { isRetryableNetworkError, MODEL_PROVIDER, getRetryAfterMs } from '../../utils/common.js';
+import { sharedHttpAgent, sharedHttpsAgent } from '../../utils/network-utils.js';
 
 /**
  * Claude API Core Service Class.
@@ -39,8 +40,11 @@ export class ClaudeApiService {
                 'Content-Type': 'application/json',
                 'anthropic-version': '2023-06-01', // Claude API 版本
             },
+            // Shared keep-alive agents — see network-utils.js for rationale
+            httpAgent: sharedHttpAgent,
+            httpsAgent: sharedHttpsAgent,
         };
-        
+
         return axios.create(axiosConfig);
     }
 

@@ -20,43 +20,23 @@
     "description": "DeepSeek V4 Flash via OpenRouter (free)"
   },
   {
-    "id": "nvidia/nemotron-3-super-120b:free",
-    "name": "Nemotron 3 Super 120B (Free)",
-    "alias": "nvidia/nemotron-3-super-120b",
+    "id": "nvidia/nemotron-3-super-120b-a12b:free",
+    "name": "Nemotron 3 Super 120B A12B (Free)",
+    "alias": "nvidia/nemotron-3-super-120b-a12b",
     "provider": "openai-custom",
     "actualProvider": "openai-custom",
     "temperature": 0.7,
     "topP": 1.0,
-    "description": "Nvidia Nemotron 3 Super 120B via OpenRouter (free)"
+    "description": "Nvidia Nemotron 3 Super 120B A12B via OpenRouter (free)"
   },
   {
-    "id": "nvidia/nemotron-3-nano-30b:free",
-    "name": "Nemotron 3 Nano 30B (Free)",
-    "alias": "nvidia/nemotron-3-nano-30b",
+    "id": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "name": "Nemotron 3 Nano 30B A3B (Free)",
+    "alias": "nvidia/nemotron-3-nano-30b-a3b",
     "provider": "openai-custom",
     "actualProvider": "openai-custom",
     "temperature": 0.7,
     "topP": 1.0,
-    "description": "Nvidia Nemotron 3 Nano 30B via OpenRouter (free)"
-  },
-  {
-    "id": "anthropic/claude-opus-4-5",
-    "name": "Claude Opus 4.5 (OpenRouter)",
-    "alias": "anthropic/claude-opus-4-5",
-    "provider": "openai-custom",
-    "actualProvider": "openai-custom",
-    "temperature": 0.7,
-    "topP": 1.0,
-    "description": "Claude Opus 4.5 via OpenRouter (paid — requires credits)"
-  },
-  {
-    "id": "mistralai/mistral-large-2512",
-    "name": "Mistral Large 2512",
-    "alias": "mistralai/mistral-large-2512",
-    "provider": "openai-custom",
-    "actualProvider": "openai-custom",
-    "temperature": 0.7,
-    "topP": 1.0,
-    "description": "Mistral Large 2512 via OpenRouter (paid — requires credits)"
+    "description": "Nvidia Nemotron 3 Nano 30B A3B via OpenRouter (free)"
   }
 ]

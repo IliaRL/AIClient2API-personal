@@ -2,23 +2,23 @@
 
 AIClient2API is a Node.js proxy on `http://localhost:3000` that unifies all available models from all providers (Kiro, Google Antigravity, Gemini CLI, OpenRouter, NVIDIA NIM, GitHub Models, OpenAI Codex) behind a single OpenAI/Anthropic/Gemini-compatible API.
 
-**Ultimate Goal**: 100% uptime for all 45 models via aggressive account rotation and cross-provider fallback.
+**Ultimate Goal**: To provide a high-performance, 100% compatible proxy system that allows any AI model to be used within the Claude Code CLI with zero friction. Every accessible model must be fully functional, including complex tool-use and schema handling.
+
+**Exhaustive Fallback Strategy:**
+1. **Vertical Rotation**: Exhaust every account for the *selected model* on the *current provider*.
+2. **Horizontal Rotation**: Exhaust every account for the *selected model* across *all other providers*.
+3. **Tiered Fallback**: Only after the selected model is 100% exhausted across all accounts and providers does the system fall back to the next most powerful model in the tier (e.g., Sonnet -> Opus -> Gemini Pro).
+*Note: Selection priority is always respected; fallbacks are silent and intended to maintain availability of the requested capability.*
+
+**Success Criteria:**
+- **Compatibility**: 100% pass rate for Claude Code tools (Agent, Bash, Grep) across all 45 models.
+- **Robustness**: Automated recovery from 429/400/500 errors via the Exhaustive Rotation logic.
+- **Visibility**: Real-time status signals (model/context/tokens) provided via the IDE status line.
+- **Efficiency**: Minimal latency overhead through optimized protocol conversion and SQLite state persistence.
 
 ## What This Proxy Is
 
 AIClient2API is an **account-rotation load-balancer** — a stateful proxy that manages credentials across 32 accounts (13 Antigravity + 6 Gemini CLI + others) to maximize throughput and availability. It translates OpenAI, Anthropic, and Gemini request/response formats on the fly.
-
-**Success looks like:**
-- All 45 models listed and callable via `/v1/models`
-- ≥25/32 accounts healthy in `/provider_health` (2 Gemini CLI on 429 cooldown is normal)
-- Responses include `X-Proxy-Actual-Model` and `X-Proxy-Actual-Provider` headers
-- Fallback chains auto-activate when accounts hit 429 or 400 errors — no manual intervention needed
-
-**Failure looks like:**
-- `no healthy provider supporting model X` (all accounts for that model on cooldown)
-- `startupRun: true` causing 429 storms on restart
-- `modelCooldowns` corrupted to `"[object Object]"` (blocks account rotation)
-- A provider missing entirely from `/provider_health`
 
 ## Non-Negotiable Rules
 1. **Port is 3000.** Never change `SERVER_PORT`.

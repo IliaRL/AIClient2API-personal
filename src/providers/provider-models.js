@@ -141,9 +141,6 @@ export const PROVIDER_MODELS = {
         'meta/llama-4-maverick-17b-128e-instruct',
         'meta/llama-3.3-70b-instruct',
         'moonshotai/kimi-k2.6',
-        'minimaxai/minimax-m2.7',
-        'deepseek-ai/deepseek-v4-pro',
-        'mistralai/mistral-large-3-675b-instruct-2512',
         'mistralai/mistral-small-4-119b-2603',
         'openai/gpt-oss-120b'
     ],

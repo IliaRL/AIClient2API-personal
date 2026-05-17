@@ -480,7 +480,7 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
 
 export async function getStats() {
     ensureLoaded();
-    const stats = JSON.parse(JSON.stringify(statsStore));
+    const stats = structuredClone(statsStore);
     
     // 注入速率统计
     const globalRates = rateManager.getGlobalStats();

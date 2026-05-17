@@ -35,6 +35,13 @@ export function getDb() {
     _db.pragma('journal_mode = WAL');
     _db.pragma('foreign_keys = ON');
     _db.pragma('synchronous = NORMAL');
+    // Performance pragmas (Context7 better-sqlite3 best practices for WAL mode):
+    // - cache_size negative => KiB; -64000 = 64 MB in-memory page cache
+    // - temp_store = MEMORY keeps temp/B-tree work in RAM (no disk I/O for sorts)
+    // - mmap_size = 256 MB memory-mapped reads (faster than read())
+    _db.pragma('cache_size = -64000');
+    _db.pragma('temp_store = MEMORY');
+    _db.pragma('mmap_size = 268435456');
 
     _initSchema(_db);
     return _db;

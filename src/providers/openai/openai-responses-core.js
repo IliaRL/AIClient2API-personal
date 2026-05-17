@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as https from 'https';
 import { configureAxiosProxy, configureTLSSidecar, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
 import { MODEL_PROVIDER, getRetryAfterMs } from '../../utils/common.js';
+import { sharedHttpAgent, sharedHttpsAgent } from '../../utils/network-utils.js';
 
 // OpenAI Responses API specification service for interacting with third-party models
 export class OpenAIResponsesApiService {
@@ -22,7 +23,11 @@ export class OpenAIResponsesApiService {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${this.apiKey}`
-            }
+            },
+            timeout: 90000,
+            // Shared keep-alive agents — see network-utils.js for rationale
+            httpAgent: sharedHttpAgent,
+            httpsAgent: sharedHttpsAgent,
         };
 
         this.axiosInstance = axios.create(axiosConfig);

@@ -73,12 +73,19 @@ _claude_mode_write_settings() {
     fi
     # Set proxy env vars and switch model to a direct proxy catalog entry.
     jq --arg base "$base" --arg token "$token" --arg model "$PROXY_CLI_MODEL" \
-      '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_AUTH_TOKEN = $token | .model = $model' \
+      '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_AUTH_TOKEN = $token | .env.ANTHROPIC_API_KEY = $token | .model = $model' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
-    # Also sync Antigravity IDE settings to proxy model
+    # Also sync Antigravity IDE settings: model + proxy env vars in terminal.integrated.env.osx
     if [ -f "$ANTIGRAVITY_SETTINGS_FILE" ]; then
       local ag_tmp="${ANTIGRAVITY_SETTINGS_FILE}.tmp.$$"
-      jq --arg model "$PROXY_CLI_MODEL" '.["claude.model"] = $model' \
+      jq --arg model "$PROXY_CLI_MODEL" \
+         --arg base "$base" --arg token "$token" \
+        '.["claude.model"] = $model
+         | .["terminal.integrated.env.osx"] = (
+             (.["terminal.integrated.env.osx"] // {})
+             + {ANTHROPIC_BASE_URL: $base, ANTHROPIC_AUTH_TOKEN: $token, ANTHROPIC_API_KEY: $token,
+                AICLIENT_BASE: $base, AICLIENT_TOKEN: $token}
+           )' \
         "$ANTIGRAVITY_SETTINGS_FILE" >"$ag_tmp" && mv "$ag_tmp" "$ANTIGRAVITY_SETTINGS_FILE"
     fi
   else
@@ -87,12 +94,17 @@ _claude_mode_write_settings() {
     native_model="$(jq -r '.native_model // empty' "$CLAUDE_PROXY_BACKUP_FILE" 2>/dev/null)"
     [ -z "$native_model" ] && native_model="$NATIVE_CLI_MODEL"
     jq --arg m "$native_model" \
-      'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN)) else . end | .model = $m' \
+      'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN, .ANTHROPIC_API_KEY)) else . end | .model = $m' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
-    # Also sync Antigravity IDE settings to native model
+    # Also sync Antigravity IDE settings: restore native model, strip proxy env vars
     if [ -f "$ANTIGRAVITY_SETTINGS_FILE" ]; then
       local ag_tmp="${ANTIGRAVITY_SETTINGS_FILE}.tmp.$$"
-      jq --arg model "$native_model" '.["claude.model"] = $model' \
+      jq --arg model "$native_model" \
+        '.["claude.model"] = $model
+         | .["terminal.integrated.env.osx"] = (
+             (.["terminal.integrated.env.osx"] // {})
+             | del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN, .ANTHROPIC_API_KEY, .AICLIENT_BASE, .AICLIENT_TOKEN)
+           )' \
         "$ANTIGRAVITY_SETTINGS_FILE" >"$ag_tmp" && mv "$ag_tmp" "$ANTIGRAVITY_SETTINGS_FILE"
     fi
   fi
@@ -123,6 +135,7 @@ claude-proxy() {
   if ! _claude_mode_proxy_alive; then
     echo "WARN: Proxy at $base did not respond. Run 'start-proxies' (or 'npm start' in the AIClient2API dir)." >&2
   fi
+  echo "proxy" > /tmp/aiclient_mode
   echo "✅ Claude Code → PROXY mode ($base)"
 }
 
@@ -144,6 +157,7 @@ claude-native() {
   unset ANTHROPIC_API_KEY
   unset ANTHROPIC_AUTH_TOKEN
   rm -f /tmp/aiclient_last_model
+  echo "native" > /tmp/aiclient_mode
 
   echo "✅ Claude Code → NATIVE mode (Anthropic direct)"
 }

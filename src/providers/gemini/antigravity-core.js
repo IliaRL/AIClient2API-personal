@@ -229,7 +229,9 @@ function normalizeAntigravityThinking(modelName, payload, isClaudeModel) {
  */
 function geminiToAntigravity(modelName, payload, projectId) {
     // 深拷贝请求体,避免修改原始对象
-    let template = JSON.parse(JSON.stringify(payload));
+    // structuredClone (Node 17+) is ~2-3x faster than JSON parse/stringify
+    // and preserves typed arrays / dates correctly.
+    let template = structuredClone(payload);
 
     const isClaudeModel = isClaude(modelName);
     const isImgModel = isImageModel(modelName);
@@ -1156,16 +1158,25 @@ export class AntigravityApiService {
             
             logger.error(`[Antigravity API] Error calling (Status: ${status}, Code: ${errorCode}):`, error.message);
 
-            if ((status === 401) && !isRetry) {
-                logger.info('[Antigravity API] Received 401 Unauthorized. Triggering background refresh via PoolManager...');
-                
-                // 标记当前凭证为不健康（会自动进入刷新队列）
+            if ((status === 401 || status === 403) && !isRetry) {
+                const is403 = status === 403;
+                const reason = is403 ? '403 Permission Denied' : '401 Unauthorized';
+                logger.info(`[Antigravity API] Received ${status}. Triggering credential switch via PoolManager...`);
+
                 const poolManager = getProviderPoolManager();
                 if (poolManager && this.uuid) {
-                    logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh. Reason: 401 Unauthorized`);
-                    poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
-                        uuid: this.uuid
-                    });
+                    if (is403) {
+                        // 403 is definitive — token refresh won't help, mark account dark immediately
+                        logger.info(`[Antigravity] Marking credential ${this.uuid} immediately unhealthy. Reason: ${reason}`);
+                        poolManager.markProviderUnhealthyImmediately(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
+                            uuid: this.uuid
+                        }, reason);
+                    } else {
+                        logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh. Reason: ${reason}`);
+                        poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
+                            uuid: this.uuid
+                        });
+                    }
                     error.credentialMarkedUnhealthy = true;
                 }
 
@@ -1264,16 +1275,25 @@ export class AntigravityApiService {
             
             logger.error(`[Antigravity API] Error during stream (Status: ${status}, Code: ${errorCode}):`, error.message);
 
-            if ((status === 401) && !isRetry) {
-                logger.info('[Antigravity API] Received 401 Unauthorized during stream. Triggering background refresh via PoolManager...');
-                
-                // 标记当前凭证为不健康（会自动进入刷新队列）
+            if ((status === 401 || status === 403) && !isRetry) {
+                const is403 = status === 403;
+                const reason = is403 ? '403 Permission Denied' : '401 Unauthorized';
+                logger.info(`[Antigravity API] Received ${status} during stream. Triggering credential switch via PoolManager...`);
+
                 const poolManager = getProviderPoolManager();
                 if (poolManager && this.uuid) {
-                    logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh. Reason: 401 Unauthorized in stream`);
-                    poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
-                        uuid: this.uuid
-                    });
+                    if (is403) {
+                        // 403 is definitive — token refresh won't help, mark account dark immediately
+                        logger.info(`[Antigravity] Marking credential ${this.uuid} immediately unhealthy. Reason: ${reason}`);
+                        poolManager.markProviderUnhealthyImmediately(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
+                            uuid: this.uuid
+                        }, reason);
+                    } else {
+                        logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh. Reason: ${reason}`);
+                        poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
+                            uuid: this.uuid
+                        });
+                    }
                     error.credentialMarkedUnhealthy = true;
                 }
 
@@ -1400,8 +1420,8 @@ export class AntigravityApiService {
         // 移除 gemini- 前缀以获取实际模型名称（针对 claude 模型）
         const actualModelName = selectedModel.startsWith('gemini-claude-') ? selectedModel.replace('gemini-claude-', 'claude-') : selectedModel;
         logger.info(`[Antigravity] Selected model: ${actualModelName}`);
-        // 深拷贝请求体
-        const processedRequestBody = ensureRolesInContents(JSON.parse(JSON.stringify(requestBody)), actualModelName);
+        // 深拷贝请求体 (structuredClone is faster than JSON parse/stringify)
+        const processedRequestBody = ensureRolesInContents(structuredClone(requestBody), actualModelName);
         const isClaudeModel = isClaude(actualModelName);
 
         // 将处理后的请求体转换为 Antigravity 格式
@@ -1479,8 +1499,8 @@ export class AntigravityApiService {
         // 移除 gemini- 前缀以获取实际模型名称（针对 claude 模型）
         const actualModelName = selectedModel.startsWith('gemini-claude-') ? selectedModel.replace('gemini-claude-', 'claude-') : selectedModel;
         logger.info(`[Antigravity] Selected model: ${actualModelName}`);
-        // 深拷贝请求体
-        const processedRequestBody = ensureRolesInContents(JSON.parse(JSON.stringify(requestBody)), actualModelName);
+        // 深拷贝请求体 (structuredClone is faster than JSON parse/stringify)
+        const processedRequestBody = ensureRolesInContents(structuredClone(requestBody), actualModelName);
 
         // 将处理后的请求体转换为 Antigravity 格式
         const payload = geminiToAntigravity(actualModelName, { request: processedRequestBody }, this.projectId);

@@ -1156,8 +1156,8 @@ export class ClaudeConverter extends BaseConverter {
                 // 清理 input_schema
                 let inputSchema = tool.input_schema;
                 if (inputSchema && typeof inputSchema === 'object') {
-                    // 创建副本以避免修改原始对象
-                    inputSchema = JSON.parse(JSON.stringify(inputSchema));
+                    // 创建副本以避免修改原始对象 (structuredClone is faster than JSON parse/stringify)
+                    inputSchema = structuredClone(inputSchema);
                     // 清理不需要的字段
                     delete inputSchema.$schema;
                     // 清理 URL 格式（Gemini 不支持）
