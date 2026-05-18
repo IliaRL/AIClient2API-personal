@@ -93,10 +93,6 @@ export const MODEL_MAX_OUTPUT_TOKENS = {
     'gpt-4.1-mini': 32768,
     'gpt-4.1-nano': 32768,
     'DeepSeek-R1': 32768,
-    'DeepSeek-V3-0324': 32768,
-    'Meta-Llama-3.1-405B-Instruct': 8192,
-    'Meta-Llama-3.1-8B-Instruct': 8192,
-    'Phi-4': 16384,
     // NVIDIA NIM
     'nvidia/llama-3.3-nemotron-super-49b-v1.5': 131072,
     'nvidia/llama-3.3-nemotron-super-49b-v1': 131072,
@@ -147,10 +143,6 @@ export const MODEL_CONTEXT_WINDOWS = {
     'gpt-4.1-mini': 1000000,
     'gpt-4.1-nano': 1000000,
     'DeepSeek-R1': 128000,
-    'DeepSeek-V3-0324': 128000,
-    'Meta-Llama-3.1-405B-Instruct': 131072,
-    'Meta-Llama-3.1-8B-Instruct': 131072,
-    'Phi-4': 16384,
     // NVIDIA NIM
     'nvidia/llama-3.3-nemotron-super-49b-v1.5': 131072,
     'nvidia/llama-3.3-nemotron-super-49b-v1': 131072,

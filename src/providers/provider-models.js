@@ -123,11 +123,7 @@ export const PROVIDER_MODELS = {
         'gpt-4.1',
         'gpt-4.1-mini',
         'gpt-4.1-nano',
-        'DeepSeek-R1',
-        'DeepSeek-V3-0324',
-        'Meta-Llama-3.1-405B-Instruct',
-        'Meta-Llama-3.1-8B-Instruct',
-        'Phi-4'
+        'DeepSeek-R1'
     ],
     'nvidia-nim': [
         // Verified live against integrate.api.nvidia.com on 2026-05-15 with the
