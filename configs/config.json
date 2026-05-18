@@ -159,8 +159,16 @@
       "targetProviderType": "gemini-cli-oauth"
     },
     "claude-haiku-4-5": {
-      "targetModel": "claude-sonnet-4-5",
-      "targetProviderType": "claude-kiro-oauth"
+      "targetModel": "gemini-claude-sonnet-4-6",
+      "targetProviderType": "gemini-antigravity"
+    },
+    "claude-sonnet-4-5-20250929": {
+      "targetModel": "gemini-claude-sonnet-4-6",
+      "targetProviderType": "gemini-antigravity"
+    },
+    "claude-sonnet-4-5": {
+      "targetModel": "gemini-claude-sonnet-4-6",
+      "targetProviderType": "gemini-antigravity"
     }
   },
   "PROXY_URL": null,

@@ -10,9 +10,9 @@ import logger from '../utils/logger.js';
 // 常量定义
 // =============================================================================
 
-// Anthropic built-in tool types (computer_use, bash, text_editor) have no input_schema —
+// Anthropic built-in tool types (computer_use, bash, text_editor, web_search) have no input_schema —
 // they cannot be forwarded to non-Anthropic backends and must be filtered out.
-export const ANTHROPIC_BUILTIN_TOOL_TYPES = /^(computer|bash|text_editor)_\d+$/;
+export const ANTHROPIC_BUILTIN_TOOL_TYPES = /^(computer|bash|text_editor|web_search)_\d+$/;
 export function isAnthropicBuiltinTool(tool) {
     return !!(tool && typeof tool.type === 'string' && ANTHROPIC_BUILTIN_TOOL_TYPES.test(tool.type));
 }
@@ -612,7 +612,7 @@ export function extractThinkingFromOpenAIText(text) {
 // =============================================================================
 
 /**
- * 全局工具状态管理器
+ * 全局工具状态管理器（带 LRU 上限防止内存泄漏）
  */
 class ToolStateManager {
     constructor() {
@@ -622,11 +622,22 @@ class ToolStateManager {
         ToolStateManager.instance = this;
         this._toolMappings = {};
         this._toolSchemas = {};
+        this._mappingKeys = []; // LRU tracking for mappings
+        this._maxMappings = 1000;
         return this;
     }
 
     storeToolMapping(funcName, toolId) {
+        // LRU eviction: if at cap and key is new, remove oldest
+        if (!(funcName in this._toolMappings) && this._mappingKeys.length >= this._maxMappings) {
+            const oldest = this._mappingKeys.shift();
+            delete this._toolMappings[oldest];
+        }
+        // Update or insert
         this._toolMappings[funcName] = toolId;
+        const idx = this._mappingKeys.indexOf(funcName);
+        if (idx !== -1) this._mappingKeys.splice(idx, 1);
+        this._mappingKeys.push(funcName);
     }
 
     storeToolSchema(funcName, schema) {
@@ -644,6 +655,7 @@ class ToolStateManager {
     clearMappings() {
         this._toolMappings = {};
         this._toolSchemas = {};
+        this._mappingKeys = [];
     }
 }
 
