@@ -11,6 +11,7 @@ import {configureTLSSidecar, isTLSSidecarEnabledForProvider} from '../../utils/p
 import {MODEL_PROVIDER, formatExpiryLog} from '../../utils/common.js';
 import {getProxyConfigForProvider} from '../../utils/proxy-utils.js';
 import {getProviderModels} from '../provider-models.js';
+import { sharedHttpAgent, sharedHttpsAgent } from '../../utils/network-utils.js';
 
 const baseModels = getProviderModels(MODEL_PROVIDER.CODEX_API);
 const fastModels = baseModels.map(m => `${m}-fast`);
@@ -195,7 +196,9 @@ export class CodexApiService {
             const config = {
                 headers,
                 responseType: 'text', // 确保以文本形式接收 SSE 流
-                timeout: 300000 // 5 分钟超时，适应慢速模型
+                timeout: 300000, // 5 分钟超时，适应慢速模型
+                httpAgent: sharedHttpAgent,
+                httpsAgent: sharedHttpsAgent,
             };
 
             const axiosRequestConfig = {
@@ -266,7 +269,9 @@ export class CodexApiService {
             const config = {
                 headers,
                 responseType: 'stream',
-                timeout: 300000 // 5 分钟超时
+                timeout: 300000, // 5 分钟超时
+                httpAgent: sharedHttpAgent,
+                httpsAgent: sharedHttpsAgent,
             };
 
             const axiosRequestConfig = {
@@ -928,7 +933,9 @@ export class CodexApiService {
 
             const config = {
                 headers,
-                timeout: 30000
+                timeout: 30000,
+                httpAgent: sharedHttpAgent,
+                httpsAgent: sharedHttpsAgent,
             };
 
             const axiosRequestConfig = {

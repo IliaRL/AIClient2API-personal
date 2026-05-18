@@ -119,6 +119,7 @@ import 'dotenv/config'; // Import dotenv and configure it
 import '../converters/register-converters.js'; // 注册所有转换器
 import { getProviderPoolManager } from './service-manager.js';
 import { isRetryableNetworkError } from '../utils/common.js';
+import { getServiceAdapter } from '../providers/adapter.js';
 
 // 检测是否作为子进程运行
 const IS_WORKER_PROCESS = process.env.IS_WORKER_PROCESS === 'true';
@@ -374,6 +375,81 @@ async function startServer() {
             logger.info('[Initialization] Performing initial health checks for provider pools...');
             poolManager.performInitialHealthChecks();
         }
+
+        // 非阻塞预热：在 listen 回调之外异步初始化 OAuth 后端适配器，
+        // 消除首次请求时 ~40-50s 的 OAuth 冷启动延迟（尤其是 gemini-antigravity）。
+        // 失败不影响启动 —— 使用 Promise.allSettled + try/catch，仅以警告记录。
+        setImmediate(() => {
+            try {
+                if (!poolManager || !poolManager.providerPools) {
+                    return;
+                }
+                const WARMUP_PROVIDER_TYPES = [
+                    'gemini-antigravity',
+                    'gemini-cli-oauth',
+                    'claude-kiro-oauth',
+                ];
+                const warmupTargets = [];
+                for (const providerType of WARMUP_PROVIDER_TYPES) {
+                    const pool = poolManager.providerPools[providerType];
+                    if (!Array.isArray(pool) || pool.length === 0) continue;
+                    for (const accountConfig of pool) {
+                        warmupTargets.push({ providerType, accountConfig });
+                    }
+                }
+                if (warmupTargets.length === 0) {
+                    logger.info('[Warmup] No OAuth-backed providers to pre-warm.');
+                    return;
+                }
+                logger.info(`[Warmup] Pre-warming ${warmupTargets.length} OAuth adapter(s) across ${WARMUP_PROVIDER_TYPES.length} provider type(s)...`);
+                const startedAt = Date.now();
+
+                const warmOne = async ({ providerType, accountConfig }) => {
+                    try {
+                        // 适配器工厂依赖 MODEL_PROVIDER 字段（pool 中的原始 config 不含该字段）。
+                        const adapterConfig = { ...accountConfig, MODEL_PROVIDER: providerType };
+                        const adapter = getServiceAdapter(adapterConfig);
+                        // 找到内部 service 实例 (geminiApiService / antigravityApiService / kiroApiService 等)
+                        // 并在未初始化时调用 initialize()
+                        const serviceKey = Object.keys(adapter).find(k =>
+                            k.endsWith('ApiService') && adapter[k] && typeof adapter[k].initialize === 'function'
+                        );
+                        if (!serviceKey) {
+                            return { providerType, uuid: accountConfig.uuid, status: 'no-service' };
+                        }
+                        const service = adapter[serviceKey];
+                        if (service.isInitialized) {
+                            return { providerType, uuid: accountConfig.uuid, status: 'already-initialized' };
+                        }
+                        await service.initialize();
+                        return { providerType, uuid: accountConfig.uuid, status: 'initialized' };
+                    } catch (err) {
+                        return { providerType, uuid: accountConfig?.uuid, status: 'failed', error: err?.message || String(err) };
+                    }
+                };
+
+                Promise.allSettled(warmupTargets.map(warmOne)).then(results => {
+                    const elapsedMs = Date.now() - startedAt;
+                    let initialized = 0, alreadyInit = 0, failed = 0, noService = 0;
+                    for (const r of results) {
+                        const v = r.status === 'fulfilled' ? r.value : null;
+                        if (!v) { failed++; continue; }
+                        if (v.status === 'initialized') initialized++;
+                        else if (v.status === 'already-initialized') alreadyInit++;
+                        else if (v.status === 'no-service') noService++;
+                        else if (v.status === 'failed') {
+                            failed++;
+                            logger.warn(`[Warmup] ${v.providerType} (${v.uuid || 'default'}) failed: ${v.error}`);
+                        }
+                    }
+                    logger.info(`[Warmup] Complete in ${elapsedMs}ms — initialized=${initialized}, already=${alreadyInit}, no-service=${noService}, failed=${failed}`);
+                }).catch(err => {
+                    logger.warn('[Warmup] Aggregate warm-up rejected (should not happen):', err?.message || err);
+                });
+            } catch (err) {
+                logger.warn('[Warmup] Pre-warm scheduling failed:', err?.message || err);
+            }
+        });
 
         // 定时健康检查
         // 注意：无论初始 enabled 状态如何，都注册 reloadHealthCheckTimer，

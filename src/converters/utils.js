@@ -315,6 +315,27 @@ export function extractAndProcessSystemMessages(messages, replacements = []) {
     return { systemInstruction, nonSystemMessages };
 }
 
+// =============================================================================
+// Schema normalization cache — avoids redundant recursive walks for identical
+// tool schemas. Claude Code tools (Agent, Bash, Read, etc.) have identical
+// schemas on every call, so this eliminates the per-request recursion cost.
+// =============================================================================
+const _schemaCache = new Map();
+const _schemaCacheKeys = [];
+const SCHEMA_CACHE_MAX = 200;
+
+function _cachedSchemaOp(cacheKey, fn) {
+    const cached = _schemaCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+    const result = fn();
+    if (_schemaCacheKeys.length >= SCHEMA_CACHE_MAX) {
+        _schemaCache.delete(_schemaCacheKeys.shift());
+    }
+    _schemaCache.set(cacheKey, result);
+    _schemaCacheKeys.push(cacheKey);
+    return result;
+}
+
 // JSON Schema 清理配置常量
 const GEMINI_ALLOWED_KEYS = [
     "type",
@@ -460,14 +481,16 @@ function cleanJsonSchemaGeneric(schema, options, recursiveFn) {
  * @returns {Object} 清理后的JSON Schema
  */
 export function cleanJsonSchemaProperties(schema) {
-    return cleanJsonSchemaGeneric(
+    if (!schema || typeof schema !== 'object') return schema;
+    const cacheKey = `props:${JSON.stringify(schema)}`;
+    return _cachedSchemaOp(cacheKey, () => cleanJsonSchemaGeneric(
         schema,
         {
             allowedKeys: GEMINI_ALLOWED_KEYS,
             typeHandler: handleGeminiTypeField
         },
         cleanJsonSchemaProperties
-    );
+    ));
 }
 
 /**
@@ -478,14 +501,16 @@ export function cleanJsonSchemaProperties(schema) {
  * @returns {Object} 清理后的JSON Schema
  */
 export function cleanJsonSchemaForOpenAI(schema) {
-    return cleanJsonSchemaGeneric(
+    if (!schema || typeof schema !== 'object') return schema;
+    const cacheKey = `oai:${JSON.stringify(schema)}`;
+    return _cachedSchemaOp(cacheKey, () => cleanJsonSchemaGeneric(
         schema,
         {
             excludedKeys: OPENAI_EXCLUDED_KEYS,
             typeHandler: handleOpenAITypeField
         },
         cleanJsonSchemaForOpenAI
-    );
+    ));
 }
 
 /**
