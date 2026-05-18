@@ -10,6 +10,13 @@ import logger from '../utils/logger.js';
 // 常量定义
 // =============================================================================
 
+// Anthropic built-in tool types (computer_use, bash, text_editor) have no input_schema —
+// they cannot be forwarded to non-Anthropic backends and must be filtered out.
+export const ANTHROPIC_BUILTIN_TOOL_TYPES = /^(computer|bash|text_editor)_\d+$/;
+export function isAnthropicBuiltinTool(tool) {
+    return !!(tool && typeof tool.type === 'string' && ANTHROPIC_BUILTIN_TOOL_TYPES.test(tool.type));
+}
+
 // 通用默认值
 export const DEFAULT_MAX_TOKENS = 8192;
 export const DEFAULT_TEMPERATURE = 1;

@@ -9,6 +9,7 @@ import {BaseConverter} from '../BaseConverter.js';
 import {
     checkAndAssignOrDefault,
     cleanJsonSchemaForOpenAI,
+    isAnthropicBuiltinTool,
     determineReasoningEffortFromBudget,
     dynamicFlattenToolArguments,
     toolStateManager,
@@ -286,6 +287,10 @@ export class ClaudeConverter extends BaseConverter {
         if (claudeRequest.tools) {
             const openaiTools = [];
             for (const tool of claudeRequest.tools) {
+                // Anthropic built-in tool types (computer_use, bash, text_editor) cannot be forwarded to OpenAI-shaped backends
+                if (isAnthropicBuiltinTool(tool)) {
+                    continue;
+                }
                 // [Schema Guard] Store tool schema for response flattening
                 if (tool.name && tool.input_schema) {
                     toolStateManager.storeToolSchema(tool.name, tool.input_schema);
@@ -1129,6 +1134,11 @@ export class ClaudeConverter extends BaseConverter {
             claudeRequest.tools.forEach(tool => {
                 if (!tool || typeof tool !== 'object') {
                     logger.warn("Skipping invalid tool declaration in claudeRequest.tools.");
+                    return;
+                }
+
+                // Anthropic built-in tool types cannot be forwarded to Gemini
+                if (isAnthropicBuiltinTool(tool)) {
                     return;
                 }
 

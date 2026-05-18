@@ -140,7 +140,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     // type: 'string' | 'int' | 'bool' | 'enum'
     const cliArgDefs = [
         { flag: '--api-key',              configKey: 'REQUIRED_API_KEY',       type: 'string' },
-        { flag: '--log-prompts',          configKey: 'PROMPT_LOG_MODE',        type: 'enum', validValues: ['console', 'file'] },
+        { flag: '--log-prompts',          configKey: 'PROMPT_LOG_MODE',        type: 'enum', validValues: ['console', 'file', 'none'] },
         { flag: '--port',                 configKey: 'SERVER_PORT',            type: 'int' },
         { flag: '--model-provider',       configKey: 'MODEL_PROVIDER',         type: 'string' },
         { flag: '--system-prompt-file',   configKey: 'SYSTEM_PROMPT_FILE_PATH', type: 'string' },
