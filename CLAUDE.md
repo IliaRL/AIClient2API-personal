@@ -11,14 +11,14 @@ AIClient2API is a Node.js proxy on `http://localhost:3000` that unifies all avai
 *Note: Selection priority is always respected; fallbacks are silent and intended to maintain availability of the requested capability.*
 
 **Success Criteria:**
-- **Compatibility**: 100% pass rate for Claude Code tools (Agent, Bash, Grep) across all 45 models.
+- **Compatibility**: 100% pass rate for Claude Code tools (Agent, Bash, Grep) across all 36 models.
 - **Robustness**: Automated recovery from 429/400/500 errors via the Exhaustive Rotation logic.
 - **Visibility**: Real-time status signals (model/context/tokens) provided via the IDE status line.
 - **Efficiency**: Minimal latency overhead through optimized protocol conversion and SQLite state persistence.
 
 ## What This Proxy Is
 
-AIClient2API is an **account-rotation load-balancer** — a stateful proxy that manages credentials across 32 accounts (13 Antigravity + 6 Gemini CLI + others) to maximize throughput and availability. It translates OpenAI, Anthropic, and Gemini request/response formats on the fly.
+AIClient2API is an **account-rotation load-balancer** — a stateful proxy that manages credentials across 31 accounts (13 Antigravity + 6 Gemini CLI + others) to maximize throughput and availability. It translates OpenAI, Anthropic, and Gemini request/response formats on the fly.
 
 ## Non-Negotiable Rules
 1. **Port is 3000.** Never change `SERVER_PORT`.
@@ -89,9 +89,9 @@ Use the right reference for the task:
 
 ## Quick Commands
 ```bash
-./scripts/safe-restart.sh          # Safe restart
-node scripts/unified-test-suite.cjs # Full test suite
-./docs/DEBUGGING.md                # Check here if tests fail
+./scripts/safe-restart.sh           # Safe restart
+node scripts/unified-test-suite.cjs # Full test suite (36 models)
+# If tests fail → see docs/DEBUGGING.md for triage procedures
 ```
 
 ## Implicit Learning & Debugging
@@ -99,5 +99,7 @@ node scripts/unified-test-suite.cjs # Full test suite
 Always check `logs/prompt_log_*.log` (enable with `PROMPT_LOG_MODE: "file"` in `configs/config.json`) to see raw request/response transformations. This is the source of truth for protocol conversion bugs.
 
 **State lives in two places:** The in-memory pool (source of truth at runtime) and SQLite (`src/utils/db.js`, persists across restarts). If state appears corrupted, compare both. SQLite state is overlaid onto the pool at startup — a corrupted SQLite row will override a healthy in-memory state on the next restart.
+
+**First request is no longer slow.** OAuth adapters (gemini-antigravity, gemini-cli-oauth, claude-kiro-oauth) are pre-warmed at startup via `setImmediate` in `src/services/api-server.js`. If a first request is still slow (>5s), check the `[Warmup]` log line in `/tmp/aiclient.log` — `failed=N` means one or more adapters didn't initialize.
 
 For full triage procedure and error lookup tables, see `docs/DEBUGGING.md`.
