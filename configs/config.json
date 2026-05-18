@@ -162,10 +162,6 @@
       "targetModel": "gemini-claude-sonnet-4-6",
       "targetProviderType": "gemini-antigravity"
     },
-    "claude-sonnet-4-5-20250929": {
-      "targetModel": "gemini-claude-sonnet-4-6",
-      "targetProviderType": "gemini-antigravity"
-    },
     "claude-sonnet-4-5": {
       "targetModel": "gemini-claude-sonnet-4-6",
       "targetProviderType": "gemini-antigravity"
