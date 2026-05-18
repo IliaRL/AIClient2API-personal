@@ -148,6 +148,39 @@ check "credentials" "refreshToken check in provider-pool-manager.js:491" \
 check "credentials" "codex-oauth.js exists (OAuth-but-no-needsReauth)" \
   "test -f '$SRC/auth/codex-oauth.js'"
 
+# ── Modular Architecture ─────────────────────────────────────────────────────
+# Assertions for the 5 focused modules extracted from common.js (May 17 decomposition)
+echo ""
+echo "[ modular-architecture ]"
+check "modular" "error-handling.js exists" \
+  "test -f '$SRC/utils/error-handling.js'"
+check "modular" "cooldown-manager.js exists" \
+  "test -f '$SRC/providers/cooldown-manager.js'"
+check "modular" "persistence-manager.js exists" \
+  "test -f '$SRC/providers/persistence-manager.js'"
+check "modular" "request-handlers.js exists" \
+  "test -f '$SRC/utils/request-handlers.js'"
+check "modular" "network-utils.js exists" \
+  "test -f '$SRC/utils/network-utils.js'"
+check "modular" "common.js is a barrel (re-exports only, ≤15 lines)" \
+  "[ \$(wc -l < '$SRC/utils/common.js') -le 15 ] && grep -q 'export' '$SRC/utils/common.js'"
+check "modular" "error-handling.js exports handleError" \
+  "grep -q 'export function handleError' '$SRC/utils/error-handling.js'"
+check "modular" "error-handling.js exports createErrorResponse" \
+  "grep -q 'export function createErrorResponse' '$SRC/utils/error-handling.js'"
+check "modular" "cooldown-manager.js exports CooldownManager class" \
+  "grep -q 'export class CooldownManager' '$SRC/providers/cooldown-manager.js'"
+check "modular" "cooldown-manager.js contains cooldown logic" \
+  "grep -qi 'cooldown' '$SRC/providers/cooldown-manager.js'"
+check "modular" "persistence-manager.js imports from db.js (SQLite)" \
+  "grep -q 'getDb\|db\.js' '$SRC/providers/persistence-manager.js'"
+check "modular" "persistence-manager.js exports initDb" \
+  "grep -q 'export function initDb' '$SRC/providers/persistence-manager.js'"
+check "modular" "network-utils.js exports sharedHttpAgent" \
+  "grep -q 'export.*sharedHttpAgent' '$SRC/utils/network-utils.js'"
+check "modular" "network-utils.js exports isRetryableNetworkError" \
+  "grep -q 'export function isRetryableNetworkError' '$SRC/utils/network-utils.js'"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "================================================"
