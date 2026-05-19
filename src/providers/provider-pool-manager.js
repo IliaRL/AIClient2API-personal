@@ -1056,6 +1056,11 @@ export class ProviderPoolManager {
             }
 
             const modelFilteredProviders = availableAndHealthyProviders.filter(p => {
+                // Skip accounts that have THIS model in per-account cooldown
+                if (this._accountHasModelCooldown(p.config, requestedModel)) {
+                    this._log('debug', `[Account Cooldown] Skipping ${this._getDisplayName(p.config)} for ${requestedModel}`);
+                    return false;
+                }
                 const supportedModels = getConfiguredSupportedModels(providerType, p.config);
                 if (supportedModels.length > 0) {
                     return supportedModels.includes(requestedModel);
@@ -1176,6 +1181,13 @@ export class ProviderPoolManager {
 
         // --- 策略 B: 如果该模型在所有兼容提供商上都失效，则进入 Model Fallback Mapping ---
         if (requestedModel && this.modelFallbackMapping && this.modelFallbackMapping[requestedModel]) {
+            // Horizontal exhaustion guard: only allow model downgrade when truly no healthy
+            // account remains for this model across ALL provider types.
+            if (this._hasAnyHealthyAccountForModel(requestedModel)) {
+                this._log('warn', `[HorizontalGuard] Model ${requestedModel}: healthy accounts still exist but routing reached model-fallback — suppressing downgrade, returning null for retry`);
+                return null;
+            }
+
             const mapping = this.modelFallbackMapping[requestedModel];
             const targetProviderType = mapping.targetProviderType;
             const targetModel = mapping.targetModel;
@@ -1221,6 +1233,109 @@ export class ProviderPoolManager {
      */
     clearModelCooldown(providerType, model) {
         this._cooldownManager.clear(providerType, model);
+    }
+
+    /**
+     * Mark a specific model in cooldown on a SPECIFIC account only (not provider-wide).
+     * Used when a single account returns a transient model-specific error (400/429/503)
+     * that should not penalize other accounts of the same providerType.
+     * Writes to config.modelCooldowns[model] = ISO expiry. selectProvider filters these out.
+     *
+     * @param {string} providerType
+     * @param {string} uuid - account uuid
+     * @param {string} model
+     * @param {number|Date} durationOrRecoveryTime - duration in ms OR a Date recovery time
+     */
+    markModelCooldownForAccount(providerType, uuid, model, durationOrRecoveryTime) {
+        if (!providerType || !uuid || !model) return;
+        const providers = this.providerStatus[providerType];
+        if (!Array.isArray(providers)) return;
+        const item = providers.find(p => p.config?.uuid === uuid);
+        if (!item) return;
+        let expiryMs;
+        if (durationOrRecoveryTime instanceof Date) {
+            expiryMs = durationOrRecoveryTime.getTime();
+        } else if (typeof durationOrRecoveryTime === 'number') {
+            expiryMs = Date.now() + durationOrRecoveryTime;
+        } else {
+            expiryMs = Date.now() + (this.modelCooldownDurationMs || 60000);
+        }
+        if (!item.config.modelCooldowns || typeof item.config.modelCooldowns !== 'object' || Array.isArray(item.config.modelCooldowns)) {
+            item.config.modelCooldowns = {};
+        }
+        item.config.modelCooldowns[model] = new Date(expiryMs).toISOString();
+        this._log('warn', `[Account Model Cooldown] ${providerType} (${this._getDisplayName(item.config)}) :: ${model} cooled down until ${new Date(expiryMs).toISOString()}`);
+        if (typeof this._debouncedSave === 'function') this._debouncedSave(providerType);
+    }
+
+    /**
+     * Mark a model in cooldown on ALL accounts of a providerType.
+     * Use only when the model is truly unavailable upstream for every account.
+     */
+    markModelCooldownAllAccounts(providerType, model, recoveryTime) {
+        if (!providerType || !model) return;
+        const providers = this.providerStatus[providerType];
+        if (!Array.isArray(providers)) return;
+        const expiryIso = recoveryTime instanceof Date
+            ? recoveryTime.toISOString()
+            : new Date(Date.now() + (typeof recoveryTime === 'number' ? recoveryTime : 300000)).toISOString();
+        for (const p of providers) {
+            if (!p.config.modelCooldowns || typeof p.config.modelCooldowns !== 'object' || Array.isArray(p.config.modelCooldowns)) {
+                p.config.modelCooldowns = {};
+            }
+            p.config.modelCooldowns[model] = expiryIso;
+        }
+        this._log('warn', `[All-Accounts Model Cooldown] ${providerType} :: ${model} cooled down until ${expiryIso} (${providers.length} accounts)`);
+        if (typeof this._debouncedSave === 'function') this._debouncedSave(providerType);
+    }
+
+    /**
+     * Returns true if THIS account has the given model in cooldown.
+     */
+    _accountHasModelCooldown(config, model) {
+        if (!config || !model) return false;
+        const cd = config.modelCooldowns;
+        if (!cd || typeof cd !== 'object' || Array.isArray(cd)) return false;
+        const iso = cd[model];
+        if (!iso) return false;
+        const exp = Date.parse(iso);
+        if (!Number.isFinite(exp)) {
+            delete cd[model];
+            return false;
+        }
+        if (Date.now() >= exp) {
+            delete cd[model];
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if ANY account across ANY provider type has a healthy, non-cooled slot
+     * for the given model. Used as a horizontal exhaustion guard before allowing
+     * modelFallbackMapping to fire (i.e., before downgrading to a lower-tier model).
+     *
+     * @param {string} modelId
+     * @returns {boolean}
+     */
+    _hasAnyHealthyAccountForModel(modelId) {
+        if (!modelId) return false;
+        for (const [providerType, accounts] of Object.entries(this.providerStatus ?? {})) {
+            if (!Array.isArray(accounts)) continue;
+            // Skip provider types that are on model-level cooldown for this model
+            if (this.isModelOnCooldown(providerType, modelId)) continue;
+            const anyHealthy = accounts.some(acct => {
+                const cfg = acct?.config;
+                if (!cfg) return false;
+                if (!cfg.isHealthy) return false;
+                if (cfg.isDisabled) return false;
+                if (cfg.needsReauth) return false;
+                if (this._accountHasModelCooldown(cfg, modelId)) return false;
+                return true;
+            });
+            if (anyHealthy) return true;
+        }
+        return false;
     }
 
     /**
@@ -1323,6 +1438,13 @@ export class ProviderPoolManager {
         // ==========================
 
         if (requestedModel && this.modelFallbackMapping && this.modelFallbackMapping[requestedModel]) {
+            // Horizontal exhaustion guard: only allow model downgrade when truly no healthy
+            // account remains for this model across ALL provider types.
+            if (this._hasAnyHealthyAccountForModel(requestedModel)) {
+                this._log('warn', `[HorizontalGuard] Model ${requestedModel}: healthy accounts still exist but routing reached model-fallback — suppressing downgrade, returning null for retry`);
+                return null;
+            }
+
             const mapping = this.modelFallbackMapping[requestedModel];
             const targetProviderType = mapping.targetProviderType;
             const targetModel = mapping.targetModel;
