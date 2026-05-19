@@ -8,6 +8,7 @@ import { createRequestHandler } from '../handlers/request-handler.js';
 import { discoverPlugins, getPluginManager } from '../core/plugin-manager.js';
 import { getTLSSidecar } from '../utils/tls-sidecar.js';
 import { HEALTH_CHECK } from '../utils/constants.js';
+import PreflightHealthMonitor from './preflight-health.js';
 
 /**
  * @license
@@ -388,6 +389,7 @@ async function startServer() {
                     'gemini-antigravity',
                     'gemini-cli-oauth',
                     'claude-kiro-oauth',
+                    'openai-codex-oauth',
                 ];
                 const warmupTargets = [];
                 for (const providerType of WARMUP_PROVIDER_TYPES) {
@@ -450,6 +452,13 @@ async function startServer() {
                 logger.warn('[Warmup] Pre-warm scheduling failed:', err?.message || err);
             }
         });
+
+        // 非阻塞预检：在后台启动 PreflightHealthMonitor，每 30s 轮询账户池，
+        // 缓存每个模型的可用账户数量（仅供参考，不影响路由决策）。
+        if (poolManager) {
+            const preflightMonitor = new PreflightHealthMonitor(poolManager);
+            setImmediate(() => preflightMonitor.start());
+        }
 
         // 定时健康检查
         // 注意：无论初始 enabled 状态如何，都注册 reloadHealthCheckTimer，
