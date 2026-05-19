@@ -32,10 +32,16 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 ---
 
-## Current Verified Baseline (2026-05-17)
+## Current Verified Baseline (2026-05-19f)
 
-- **40 models across 7 providers** — all verified live with 0 errors
-- **32 pool accounts** — gemini-cli-oauth accounts may be on transient 429 cooldown (auto-recovers in 30s, normal)
+- **36 models across 8 providers** — all verified live (incl. grok-web)
+- **35 pool accounts** (updated this session — 9 additional Antigravity accounts added)
+- **Staging-API fix 2026-05-19e**: 403 "Gemini for Google Cloud API (Staging) has not been used in project" from generateContent now applies 24h per-account model cooldown instead of marking account dead. Accounts that can't serve HIGH thinking can still serve other models.
+- **404 fix 2026-05-19e**: 404 "Requested entity was not found" in request-handlers.js now applies model cooldown instead of marking full account unhealthy.
+- **TTFT fix (this session)**: TTFT timeout now applies 30s per-model cooldown (`markModelCooldownForAccount`) instead of full account blackout. `TTFT_TIMEOUT_OVERRIDES` in config.json allows per-model override (45s for pro-high, 30s for opus).
+- **Horizontal exhaustion guard (this session)**: `_hasAnyHealthyAccountForModel()` helper in `provider-pool-manager.js` prevents fallback thrash when all accounts for a model are in cooldown.
+- **PreflightHealthMonitor (this session)**: `src/services/preflight-health.js` — background 30s polling of model availability, advisory cache. Never affects routing decisions.
+- **429 fix applied 2026-05-19**: Per-account 429 backoff removed from gemini-core.js + antigravity-core.js. Account rotation now immediate. Jitter 500→100ms.
 - **Port**: 3000 · **Bearer**: `sk-a60f3efdf9b97e63c84ab4a3583f9d1c`
 - **Restart**: `./scripts/safe-restart.sh` ONLY
 - **Memory**: `/Users/ilialiston/AIClient2API/.claude/agent-memory/aiclient-master-architect/`
@@ -47,10 +53,11 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 | `claude-kiro-oauth` | 3 | claude-haiku-4-5, claude-sonnet-4-5, claude-sonnet-4-5-20250929 |
 | `gemini-antigravity` | 5 | gemini-3-flash, gemini-3.1-pro-high, gemini-3.1-pro-low, gemini-claude-sonnet-4-6, gemini-claude-opus-4-6-thinking |
 | `gemini-cli-oauth` | 6 | gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview |
-| `github-models` | 10 | gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, DeepSeek-R1, DeepSeek-V3-0324, Meta-Llama-3.1-405B-Instruct, Meta-Llama-3.1-8B-Instruct, Phi-4 |
+| `github-models` | 6 | gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, DeepSeek-R1 |
 | `nvidia-nim` | 7 | meta/llama-3.3-70b-instruct, meta/llama-4-maverick-17b-128e-instruct, mistralai/mistral-small-4-119b-2603, moonshotai/kimi-k2.6, nvidia/llama-3.3-nemotron-super-49b-v1, nvidia/llama-3.3-nemotron-super-49b-v1.5, openai/gpt-oss-120b |
 | `openai-codex-oauth` | 5 | gpt-5.2, gpt-5.3-codex, gpt-5.4, gpt-5.4-mini, gpt-5.5 |
 | `openai-custom` (OpenRouter) | 4 | openai/gpt-oss-20b:free, deepseek/deepseek-v4-flash:free, nvidia/nemotron-3-super-120b-a12b:free, nvidia/nemotron-3-nano-30b-a3b:free |
+| `grok-web` | 11 | grok-4.1-mini, grok-4.1-thinking, grok-4.20, grok-4.20-auto, grok-4.20-fast, grok-4.20-expert, grok-4.20-heavy, grok-imagine-1.0, grok-imagine-1.0-edit, grok-imagine-1.0-fast, grok-imagine-1.0-fast-edit — **requires SSO tokens** in `configs/provider_pools.json → grok-web` |
 
 ---
 
@@ -74,6 +81,20 @@ For any task, identify its type and load the matching skill before acting. Each 
 | Full audit / post-change verification across all systems | **Delegate to `aiclient-parallel-repair` agent** |
 
 **Always load the skill first.** Skills contain exact file locations, verified commands, and all known fixes for their domain.
+
+---
+
+## Power Tools — Use These for Precision and Speed
+
+| Need | Tool |
+|---|---|
+| Catch JS errors after edits, before restart | `mcp__ide__getDiagnostics` |
+| Fetch live SDK/API docs (axios, openai, @google/generative-ai) | `mcp__plugin_context7_context7__resolve-library-id` + `query-docs` |
+| Security scan on any modified source file | `aikido:scan` skill |
+| Parallel diagnostics across all providers simultaneously | Spawn `aiclient-parallel-repair` agent |
+| Multi-signal root-cause reasoning before patching | `mcp__sequential-thinking__sequentialthinking` |
+| Deep codebase exploration across multiple files | Spawn `Explore` subagent |
+| Final verification before claiming work complete | `superpowers:verification-before-completion` skill |
 
 ---
 
@@ -187,7 +208,7 @@ print(f'{len(d[\"items\"])-len(bad)}/{len(d[\"items\"])} healthy')
 [print(f'  UNHEALTHY: {i[\"provider\"]} — {str(i.get(\"lastErrorMessage\",\"\"))[:80]}') for i in bad]
 "
 
-# 3. Models (expected: 40 across 7 providers)
+# 3. Models (expected: 36 across 8 providers)
 curl -s http://127.0.0.1:3000/v1/models \
   -H "Authorization: Bearer sk-a60f3efdf9b97e63c84ab4a3583f9d1c" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); by={}; \

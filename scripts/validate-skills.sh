@@ -61,20 +61,20 @@ check "routing" "normalizeConfiguredProviders in config-manager.js:12" \
   "grep -n 'normalizeConfiguredProviders' '$SRC/core/config-manager.js' | head -1 | grep -q '12:'"
 check "routing" "handleAPIRequests in api-manager.js:32" \
   "grep -n 'handleAPIRequests' '$SRC/services/api-manager.js' | head -1 | grep -q '32:'"
-check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:483" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '483:'"
+check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:542" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '542:'"
 check "routing" "handleModelListRequest in request-handlers.js (model aggregation)" \
   "grep -q 'handleModelListRequest' '$SRC/utils/request-handlers.js'"
 
 # ── aiclient-statusline ───────────────────────────────────────────────────────
 echo ""
 echo "[ aiclient-statusline ]"
-check "statusline" "updateLastModelFile writes /tmp/aiclient_last_model at request-handlers.js:281" \
-  "grep -n 'aiclient_last_model' '$SRC/utils/request-handlers.js' | head -1 | grep -q '281:'"
-check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:483" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '483:'"
-check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:729" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '729:'"
+check "statusline" "updateLastModelFile writes /tmp/aiclient_last_model at request-handlers.js:298" \
+  "grep -n 'aiclient_last_model' '$SRC/utils/request-handlers.js' | head -1 | grep -q '298:'"
+check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:542" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '542:'"
+check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:851" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '851:'"
 
 # ── aiclient-debug ────────────────────────────────────────────────────────────
 echo ""
