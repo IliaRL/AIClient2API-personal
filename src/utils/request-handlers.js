@@ -613,14 +613,14 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                 // TTFT timeout: per-model cooldown, not full account blackout
                 const ttftCooldownMs = 30_000;
                 if (typeof providerPoolManager?.markModelCooldownForAccount === 'function') {
-                    providerPoolManager.markModelCooldownForAccount(
-                        toProvider,
-                        pooluuid,
-                        model,
-                        ttftCooldownMs
-                    );
-                    credentialMarkedUnhealthy = true;
-                    logger.warn(`[TTFT] Per-model cooldown applied: ${toProvider}/${pooluuid?.slice(0, 8)} for model ${model} (${ttftCooldownMs}ms)`);
+                    try {
+                        providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, ttftCooldownMs);
+                        credentialMarkedUnhealthy = true;
+                        logger.warn(`[TTFT] Per-model cooldown applied: ${toProvider}/${pooluuid?.slice(0, 8)} for model ${model} (${ttftCooldownMs}ms)`);
+                    } catch (cooldownErr) {
+                        logger.warn(`[TTFT] markModelCooldownForAccount failed: ${cooldownErr.message}`);
+                        credentialMarkedUnhealthy = true;
+                    }
                 }
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to stream error (status: ${status || 'unknown'})`);
