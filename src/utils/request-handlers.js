@@ -37,6 +37,15 @@ import {
     normalizeModelIds,
 } from '../providers/provider-models.js';
 import { handleError, createErrorResponse, createStreamErrorResponse } from './error-handling.js';
+import { recordFallbackStep, isReasoningModel, isThinkingEnabled } from './trace-buffer.js';
+
+/**
+ * Retrieve the active diagnostic trace from CONFIG, if present.
+ * Returns null when no trace is attached (e.g. internal/health-check requests).
+ */
+function _getTrace(CONFIG) {
+    return CONFIG?._trace || null;
+}
 
 // ==================== Private helpers (handler-internal) ====================
 
@@ -182,13 +191,21 @@ function appendCustomModelsToModelList(clientModelList, customEntries, providerT
 }
 
 /**
- * Applies a short (60s) model-level cooldown for 400 errors so other pool accounts can rotate in.
+ * Applies a short (60s) PER-ACCOUNT model-level cooldown for 400 errors so other pool
+ * accounts can rotate in. A 400 on one account does not mean the model is broken for
+ * every other account on the same provider type.
+ *
  * 429/5xx errors use the default 5-minute cooldown set elsewhere.
  */
-function _applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error) {
+function _applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error, pooluuid) {
     if ((error?.response?.status === 400 || status === 400) && providerPoolManager && toProvider && model) {
         try {
-            providerPoolManager.markModelCooldown(toProvider, model, 60000);
+            if (pooluuid && typeof providerPoolManager.markModelCooldownForAccount === 'function') {
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
+            } else if (typeof providerPoolManager.markModelCooldown === 'function') {
+                // Fallback: provider-type-wide cooldown (legacy behavior) only if uuid unavailable.
+                providerPoolManager.markModelCooldown(toProvider, model, 60000);
+            }
         } catch (e) {
             logger.warn(`[Provider Pool] markModelCooldown failed: ${e.message}`);
         }
@@ -335,16 +352,58 @@ export async function handleStreamRequest(res, service, model, requestBody, from
     let hasToolCall = false;
     let hasMessageStop = false; // 跟踪是否已经发送过结束标志（message_stop / done）
 
+    // ---- Diagnostic timing ----
+    const _trace = _getTrace(CONFIG);
+    const _upstreamStartedAt = Date.now();
+    const _ttftBaseline = (CONFIG && typeof CONFIG.TTFT_TIMEOUT_MS === 'number') ? CONFIG.TTFT_TIMEOUT_MS : 10000;
+    const _ttftOverrides = (CONFIG && CONFIG.TTFT_TIMEOUT_OVERRIDES) ? CONFIG.TTFT_TIMEOUT_OVERRIDES : {};
+    const _ttftThresholdMs = _ttftOverrides[model] ?? _ttftBaseline;
+    let _firstChunkSeen = false;
+    let _ttftTimer = null;
+    // Track whether this request is reasoning-exempt (no abort even if TTFT exceeded).
+    const _isReasoning = isReasoningModel(model) || (_trace && _trace._thinkingEnabled);
+
     try {
         // The service returns a stream in its native format (toProvider).
         const needsConversion = getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider);
         requestBody.model = model;
         const nativeStream = await service.generateContentStream(model, requestBody);
+        // Start TTFT timer immediately after upstream call returns the stream object.
+        // For non-reasoning models, this aborts via stream-error if no first chunk in N ms.
+        _ttftTimer = setTimeout(() => {
+            if (_firstChunkSeen) return;
+            if (_isReasoning) {
+                logger.warn(`[TTFT-WARN] ${model} exceeded ${_ttftThresholdMs}ms TTFT threshold — reasoning model, continuing...`);
+                if (_trace) _trace.ttftWarning = `exceeded ${_ttftThresholdMs}ms (reasoning, not aborted)`;
+                return;
+            }
+            // Non-reasoning model: trigger fallback by injecting an error into the stream loop.
+            logger.error(`[TTFT-ABORT] ${model} exceeded ${_ttftThresholdMs}ms TTFT — aborting and triggering fallback`);
+            if (_trace) {
+                _trace.ttftAborted = true;
+                _trace.status = 'timeout';
+            }
+            try {
+                // Mark the upstream stream as errored. Most async iterators support .return() to break out;
+                // also try .destroy()/.cancel() defensively for various adapter implementations.
+                if (typeof nativeStream?.return === 'function') nativeStream.return();
+                if (typeof nativeStream?.destroy === 'function') nativeStream.destroy(new Error(`TTFT timeout (${_ttftThresholdMs}ms)`));
+                if (typeof nativeStream?.cancel === 'function') nativeStream.cancel();
+            } catch (_) { /* best-effort */ }
+        }, _ttftThresholdMs);
         const addEvent = getProtocolPrefix(fromProvider) === MODEL_PROTOCOL_PREFIX.CLAUDE || getProtocolPrefix(fromProvider) === MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES;
         // 为每个请求生成唯一 ID，用于在单例 converter 中隔离并发流状态
         const streamRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
         for await (const nativeChunk of nativeStream) {
+            // First-chunk hook → records TTFT and clears the TTFT abort timer.
+            if (!_firstChunkSeen) {
+                _firstChunkSeen = true;
+                if (_ttftTimer) { clearTimeout(_ttftTimer); _ttftTimer = null; }
+                if (_trace && _trace.upstreamTTFTMs == null) {
+                    _trace.upstreamTTFTMs = Date.now() - _upstreamStartedAt;
+                }
+            }
             // 检查客户端是否已断开连接
             if (clientDisconnected.value) {
                 logger.info('[Stream] Stopping iteration due to client disconnect');
@@ -482,8 +541,18 @@ export async function handleStreamRequest(res, service, model, requestBody, from
             // Update last model file for statusline accuracy
             updateLastModelFile(model);
         }
+        // Record total upstream time on success.
+        if (_trace) {
+            _trace.totalUpstreamMs = Date.now() - _upstreamStartedAt;
+            _trace.provider = toProvider;
+            _trace.model = model;
+        }
 
     }  catch (error) {
+        if (_ttftTimer) { clearTimeout(_ttftTimer); _ttftTimer = null; }
+        if (_trace && _trace.totalUpstreamMs == null) {
+            _trace.totalUpstreamMs = Date.now() - _upstreamStartedAt;
+        }
         logger.error('\n[Server] Error during stream processing:', error.stack);
 
         // 如果客户端已断开，不需要发送错误响应
@@ -532,9 +601,27 @@ export async function handleStreamRequest(res, service, model, requestBody, from
 
         // 如果底层未标记，且不跳过错误计数，则在此处标记
         if (!credentialMarkedUnhealthy && !skipErrorCount && providerPoolManager && pooluuid) {
-            // 400 报错码通常是请求参数问题，不记录为提供商错误
+            // 400 = client/model error, 404 = model not available on this project.
+            // Neither should mark the whole account unhealthy — apply model cooldown instead.
             if (error.response?.status === 400 || status === 400) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to status 400 (client error)`);
+            } else if ((error.response?.status === 404 || status === 404) && model) {
+                logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 404 — applying model cooldown for ${model}`);
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model);
+                credentialMarkedUnhealthy = true;
+            } else if (error.message?.includes('TTFT timeout')) {
+                // TTFT timeout: per-model cooldown, not full account blackout
+                const ttftCooldownMs = 30_000;
+                if (typeof providerPoolManager?.markModelCooldownForAccount === 'function') {
+                    providerPoolManager.markModelCooldownForAccount(
+                        toProvider,
+                        pooluuid,
+                        model,
+                        ttftCooldownMs
+                    );
+                    credentialMarkedUnhealthy = true;
+                    logger.warn(`[TTFT] Per-model cooldown applied: ${toProvider}/${pooluuid?.slice(0, 8)} for model ${model} (${ttftCooldownMs}ms)`);
+                }
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to stream error (status: ${status || 'unknown'})`);
                 // 如果是号池模式，并且请求处理失败，则标记当前使用的提供者为不健康
@@ -545,7 +632,7 @@ export async function handleStreamRequest(res, service, model, requestBody, from
             }
         }
 
-        if (_applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error)) {
+        if (_applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error, pooluuid)) {
             credentialMarkedUnhealthy = true;
         }
 
@@ -558,8 +645,7 @@ export async function handleStreamRequest(res, service, model, requestBody, from
         // 不再依赖状态码判断，只要凭证被标记不健康且可以重试，就尝试切换
         if (credentialMarkedUnhealthy && currentRetry < maxRetries && providerPoolManager && CONFIG) {
             // Small jitter to avoid stampede when multiple concurrent requests switch at once.
-            // 500ms max is sufficient — 10s was causing 1-2 minute stalls with 10 retries.
-            const randomDelay = Math.floor(Math.random() * 500); // 0-500ms
+            const randomDelay = Math.floor(Math.random() * 100); // 0-100ms
             logger.info(`[Stream Retry] Credential marked unhealthy. Waiting ${randomDelay}ms before retry ${currentRetry + 1}/${maxRetries} with different credential...`);
             await new Promise(resolve => setTimeout(resolve, randomDelay));
 
@@ -571,6 +657,30 @@ export async function handleStreamRequest(res, service, model, requestBody, from
 
                 if (result && result.service) {
                     logger.info(`[Stream Retry] Switched to new credential: ${result.uuid} (provider: ${result.actualProviderType})`);
+
+                    // Record fallback step on the trace.
+                    if (_trace) {
+                        recordFallbackStep(_trace, {
+                            fromProvider: toProvider,
+                            toProvider: result.actualProviderType || toProvider,
+                            reason: error?.message ? error.message.slice(0, 200) : 'credential-rotation',
+                            errorCode: status || null,
+                            penaltyMs: Date.now() - _upstreamStartedAt,
+                        });
+                        // When PROMPT_LOG_MODE=file, persist fallback chain inline.
+                        if (PROMPT_LOG_MODE === 'file') {
+                            try {
+                                await logConversation('fallback', JSON.stringify({
+                                    requestId: _trace.requestId,
+                                    step: _trace.fallbackCount,
+                                    from: toProvider,
+                                    to: result.actualProviderType,
+                                    reason: error?.message?.slice(0, 200),
+                                    status,
+                                }), PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
+                            } catch (_) { /* logging is best-effort */ }
+                        }
+                    }
 
                     // 使用新服务重试
                     const newRetryContext = {
@@ -678,11 +788,23 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
     const currentRetry = retryContext?.currentRetry ?? 0;
     const CONFIG = retryContext?.CONFIG;
 
+    // ---- Diagnostic timing (unary path) ----
+    const _trace = _getTrace(CONFIG);
+    const _upstreamStartedAt = Date.now();
+
     try{
         // The service returns the response in its native format (toProvider).
         const needsConversion = getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider);
         requestBody.model = model;
         const nativeResponse = await service.generateContent(model, requestBody);
+        // For unary, TTFT == total upstream time (single shot).
+        if (_trace) {
+            const elapsed = Date.now() - _upstreamStartedAt;
+            if (_trace.upstreamTTFTMs == null) _trace.upstreamTTFTMs = elapsed;
+            _trace.totalUpstreamMs = elapsed;
+            _trace.provider = toProvider;
+            _trace.model = model;
+        }
         const responseText = extractResponseText(nativeResponse, toProvider);
 
         // Convert the response back to the client's format (fromProvider), if necessary.
@@ -753,9 +875,14 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
 
         // 如果底层未标记，且不跳过错误计数，则在此处标记
         if (!credentialMarkedUnhealthy && !skipErrorCount && providerPoolManager && pooluuid) {
-            // 400 报错码通常是请求参数问题，不记录为提供商错误
+            // 400 = client/model error, 404 = model not available on this project.
+            // Neither should mark the whole account unhealthy — apply model cooldown instead.
             if (error.response?.status === 400 || status === 400) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to status 400 (client error)`);
+            } else if ((error.response?.status === 404 || status === 404) && model) {
+                logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 404 — applying model cooldown for ${model}`);
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model);
+                credentialMarkedUnhealthy = true;
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to unary error (status: ${status || 'unknown'})`);
                 // 如果是号池模式，并且请求处理失败，则标记当前使用的提供者为不健康
@@ -766,7 +893,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
             }
         }
 
-        if (_applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error)) {
+        if (_applyBadRequestCooldown(providerPoolManager, toProvider, model, status, error, pooluuid)) {
             credentialMarkedUnhealthy = true;
         }
 
@@ -779,8 +906,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         // 不再依赖状态码判断，只要凭证被标记不健康且可以重试，就尝试切换
         if (credentialMarkedUnhealthy && currentRetry < maxRetries && providerPoolManager && CONFIG) {
             // Small jitter to avoid stampede when multiple concurrent requests switch at once.
-            // 500ms max is sufficient — 10s was causing 1-2 minute stalls with 10 retries.
-            const randomDelay = Math.floor(Math.random() * 500); // 0-500ms
+            const randomDelay = Math.floor(Math.random() * 100); // 0-100ms
             logger.info(`[Unary Retry] Credential marked unhealthy. Waiting ${randomDelay}ms before retry ${currentRetry + 1}/${maxRetries} with different credential...`);
             await new Promise(resolve => setTimeout(resolve, randomDelay));
 
@@ -792,6 +918,29 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
 
                 if (result && result.service) {
                     logger.info(`[Unary Retry] Switched to new credential: ${result.uuid} (provider: ${result.actualProviderType})`);
+
+                    // Record fallback step on the trace.
+                    if (_trace) {
+                        recordFallbackStep(_trace, {
+                            fromProvider: toProvider,
+                            toProvider: result.actualProviderType || toProvider,
+                            reason: error?.message ? error.message.slice(0, 200) : 'credential-rotation',
+                            errorCode: status || null,
+                            penaltyMs: Date.now() - _upstreamStartedAt,
+                        });
+                        if (PROMPT_LOG_MODE === 'file') {
+                            try {
+                                await logConversation('fallback', JSON.stringify({
+                                    requestId: _trace.requestId,
+                                    step: _trace.fallbackCount,
+                                    from: toProvider,
+                                    to: result.actualProviderType,
+                                    reason: error?.message?.slice(0, 200),
+                                    status,
+                                }), PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
+                            } catch (_) { /* best-effort */ }
+                        }
+                    }
 
                     // 使用新服务重试
                     const newRetryContext = {
@@ -1118,6 +1267,27 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
     }
 
     await logConversation('input', promptText, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
+
+    // Populate diagnostic trace before dispatch.
+    // proxyOverheadMs = time from inbound receipt → first upstream call.
+    const _trace = _getTrace(CONFIG);
+    if (_trace) {
+        _trace.model = model;
+        _trace.provider = toProvider;
+        _trace.proxyOverheadMs = Date.now() - _trace.startedAt;
+        if (isFallbackUsed) {
+            // Capture the initial pool-selection fallback (provider/model resolution layer).
+            recordFallbackStep(_trace, {
+                fromProvider: CONFIG.MODEL_PROVIDER,
+                toProvider,
+                reason: 'initial-pool-selection-fallback',
+                errorCode: null,
+                penaltyMs: 0,
+            });
+        }
+        // Stash request-body thinking flag so the stream handler can consult it.
+        _trace._thinkingEnabled = isThinkingEnabled(originalRequestBody) || isThinkingEnabled(processedRequestBody);
+    }
 
     // 5. Call the appropriate stream or unary handler, passing the provider info.
     // 创建重试上下文，包含 CONFIG 以便在认证错误时切换凭证重试

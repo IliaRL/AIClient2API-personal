@@ -7,7 +7,7 @@
   "SYSTEM_PROMPT_MODE": "append",
   "SYSTEM_PROMPT_REPLACEMENTS": [],
   "PROMPT_LOG_BASE_NAME": "prompt_log",
-  "PROMPT_LOG_MODE": "none",
+  "PROMPT_LOG_MODE": "file",
   "REQUEST_MAX_RETRIES": 5,
   "REQUEST_BASE_DELAY": 200,
   "CREDENTIAL_SWITCH_MAX_RETRIES": 10,
@@ -15,6 +15,14 @@
   "RATE_LIMIT_COOLDOWN_MS": 30000,
   "RATE_LIMIT_COOLDOWN_JITTER_MS": 5000,
   "RATE_LIMIT_COOLDOWN_MAX_MS": 300000,
+  "TTFT_TIMEOUT_MS": 10000,
+  "TTFT_TIMEOUT_OVERRIDES": {
+    "gemini-3.1-pro-high": 45000,
+    "gemini-2.5-pro": 45000,
+    "gemini-2.5-pro-high": 45000,
+    "claude-opus-4-7": 30000,
+    "claude-opus-4-6": 30000
+  },
   "CRON_NEAR_MINUTES": 15,
   "CRON_REFRESH_TOKEN": true,
   "LOGIN_EXPIRY": 3600,
@@ -107,6 +115,10 @@
       "targetProviderType": "claude-kiro-oauth"
     },
     "gemini-2.5-flash": {
+      "targetModel": "gemini-3-flash",
+      "targetProviderType": "gemini-antigravity"
+    },
+    "gemini-2.5-flash-lite": {
       "targetModel": "gemini-3-flash",
       "targetProviderType": "gemini-antigravity"
     },
