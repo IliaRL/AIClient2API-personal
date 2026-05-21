@@ -30,4 +30,7 @@ master_creds.json
 AGENTS.md
 src/plugins-user/
 .worktrees/
+.playwright-mcp/
+pool_state.db
+configs/pwd
 
