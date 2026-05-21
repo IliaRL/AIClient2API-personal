@@ -1,5 +1,6 @@
 'use strict';
 
+import { readFileSync, existsSync } from 'fs';
 import { getConfiguredSupportedModels, getProviderModels } from '../providers/provider-models.js';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -62,6 +63,28 @@ class PreflightHealthMonitor {
                     const cfg = acct.config;
                     if (!cfg) continue;
                     if (cfg.isDisabled || cfg.needsReauth || cfg.isHealthy === false) continue;
+
+                    // Proactive OAuth token expiry check for file-based Kiro credentials.
+                    // Reads expiresAt from the credential file (not the pool config) every 30s.
+                    if (cfg.KIRO_OAUTH_CREDS_FILE_PATH && existsSync(cfg.KIRO_OAUTH_CREDS_FILE_PATH)) {
+                        try {
+                            const creds = JSON.parse(readFileSync(cfg.KIRO_OAUTH_CREDS_FILE_PATH, 'utf8'));
+                            if (creds.expiresAt) {
+                                const msUntilExpiry = new Date(creds.expiresAt).getTime() - Date.now();
+                                if (msUntilExpiry <= 30_000) {
+                                    // Token expired or within 30s buffer — skip; do not count as available.
+                                    continue;
+                                }
+                                if (msUntilExpiry < 30 * 60 * 1000 && !cfg.needsRefresh) {
+                                    // Token expiring within 30 minutes — flag for background refresh.
+                                    cfg.needsRefresh = true;
+                                    console.info(`[Preflight] Kiro token near expiry (${Math.round(msUntilExpiry / 60000)}min) — flagging needsRefresh.`);
+                                }
+                            }
+                        } catch {
+                            // Non-critical read error — continue without expiry check.
+                        }
+                    }
 
                     // Resolve the models this account supports — prefer per-account config,
                     // fall back to the provider-level model list.
