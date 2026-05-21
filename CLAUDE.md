@@ -7,18 +7,18 @@ AIClient2API is a Node.js proxy on `http://localhost:3000` that unifies all avai
 **Exhaustive Fallback Strategy:**
 1. **Vertical Rotation**: Exhaust every account for the *selected model* on the *current provider*.
 2. **Horizontal Rotation**: Exhaust every account for the *selected model* across *all other providers*.
-3. **Tiered Fallback**: Only after the selected model is 100% exhausted across all accounts and providers does the system fall back to the next most powerful model in the tier (e.g., Sonnet -> Opus -> Gemini Pro).
+3. **Tiered Fallback**: Only after the selected model is 100% exhausted across all accounts and providers does the system fall back to the next available model in the tier (e.g., Opus -> Sonnet -> Gemini Flash — always downgrading, never upgrading).
 *Note: Selection priority is always respected; fallbacks are silent and intended to maintain availability of the requested capability.*
 
 **Success Criteria:**
-- **Compatibility**: 100% pass rate for Claude Code tools (Agent, Bash, Grep) across all 36 models.
+- **Compatibility**: 100% pass rate for any and all Claude Code tools (Agent, Bash, Grep) across all 39 models.
 - **Robustness**: Automated recovery from 429/400/500 errors via the Exhaustive Rotation logic.
 - **Visibility**: Real-time status signals (model/context/tokens) provided via the IDE status line.
 - **Efficiency**: Minimal latency overhead through optimized protocol conversion and SQLite state persistence.
 
 ## What This Proxy Is
 
-AIClient2API is an **account-rotation load-balancer** — a stateful proxy that manages credentials across 31 accounts (13 Antigravity + 6 Gemini CLI + others) to maximize throughput and availability. It translates OpenAI, Anthropic, and Gemini request/response formats on the fly.
+AIClient2API is an **account-rotation load-balancer** — a stateful proxy that manages credentials across 30 accounts (9 Antigravity + 14 Gemini CLI + 3 Kiro + 1 Codex + others) to maximize throughput and availability. It translates OpenAI, Anthropic, and Gemini request/response formats on the fly.
 
 ## Non-Negotiable Rules
 1. **Port is 3000.** Never change `SERVER_PORT`.
@@ -32,7 +32,26 @@ AIClient2API is an **account-rotation load-balancer** — a stateful proxy that 
 9. **Health check models must be live.** `DEFAULT_HEALTH_CHECK_MODELS` and `defaultCheckModel` must reference verified-live IDs.
 10. **`modelCooldowns` must be objects.** Clean if they become `"[object Object]"`.
 
+## Skill Scope Guard
+
+**Before loading any `aiclient-*`, `proxy-repair`, or `aiclient-parallel-repair` skill, confirm the current task involves one of:**
+- A file under `src/`, `configs/`, or `scripts/` in this repo
+- A proxy endpoint (`/v1/messages`, `/provider_health`, `/v1/models`)
+- A provider credential or pool account issue
+
+**These task types are NOT proxy tasks — skip all proxy skills entirely:**
+- Editing `~/.mcp.json`, `~/.claude/settings.json`, or any file outside this repo
+- Shell dotfile changes (`~/dotfiles/`, `~/.zshrc`)
+- Playwright/MCP server configuration
+- Claude Code IDE settings or keybindings
+
+If the task is outside this repo's scope, tell the user to open a new Claude Code window anchored to `~` instead of `~/AIClient2API`.
+
 ## AI Behavior Guidance
+
+**CRITICAL: PROACTIVE CLARIFICATION**
+Always invoke the `AskUserQuestion` tool and continuously ask questions whenever you are not 95% certain of what you are being asked to do, or what the exact goal of the prompt is. This allows the user to clarify and ensures you always fully understand the task and goal before acting.
+
 
 Before acting on any request:
 
@@ -89,8 +108,10 @@ Use the right reference for the task:
 
 ## Quick Commands
 ```bash
-./scripts/safe-restart.sh           # Safe restart
-node scripts/unified-test-suite.cjs # Full test suite (36 models)
+./scripts/safe-restart.sh              # Safe restart (kills only port-3000 listener)
+node scripts/master-smoke-test.cjs     # Quick smoke: 7 suites, 5 models, ~90s — use this first
+node scripts/unified-test-suite.cjs    # Full suite: all 39 models — use after major changes only
+bash scripts/validate-skills.sh        # Assert all 63 skill reference points are still accurate
 # If tests fail → see docs/DEBUGGING.md for triage procedures
 ```
 
@@ -103,3 +124,35 @@ Always check `logs/prompt_log_*.log` (enable with `PROMPT_LOG_MODE: "file"` in `
 **First request is no longer slow.** OAuth adapters (gemini-antigravity, gemini-cli-oauth, claude-kiro-oauth) are pre-warmed at startup via `setImmediate` in `src/services/api-server.js`. If a first request is still slow (>5s), check the `[Warmup]` log line in `/tmp/aiclient.log` — `failed=N` means one or more adapters didn't initialize.
 
 For full triage procedure and error lookup tables, see `docs/DEBUGGING.md`.
+
+---
+
+## Skills & Agents — When to Use
+
+**Project-specific skills** (always check first for any proxy task): `aiclient-master`, `aiclient-preflight`, `aiclient-health`, `aiclient-routing`, `aiclient-models`, `aiclient-tooluse`, `aiclient-providers`, `aiclient-credentials`, `aiclient-debug`, `aiclient-statusline`, `aiclient-sync`, `aiclient-cleanup`, `proxy-repair`, `config`
+
+**Global skills** — use proactively alongside project skills. Default to using all of them; the table below indicates the highest-impact trigger points for this project specifically:
+
+| Skill | Highest-impact trigger in this project |
+|---|---|
+| `superpowers:systematic-debugging` | Any bug, error, or unexpected behavior — diagnose before touching code |
+| `superpowers:verification-before-completion` | Before claiming any fix works — requires fresh `/provider_health` or test output as evidence |
+| `superpowers:brainstorming` | Before adding providers, models, fallback chains, or routing changes |
+| `superpowers:dispatching-parallel-agents` | Simultaneous diagnostics across multiple providers or independent audit tasks |
+| `superpowers:writing-plans` | Before any multi-file change, new provider, or upstream merge |
+| `superpowers:subagent-driven-development` | Executing complex multi-step plans with independent sub-tasks |
+| `superpowers:requesting-code-review` / `review` | Before merging routing, converter, or credential changes |
+| `superpowers:receiving-code-review` | When reviewing suggestions — verify technically before applying |
+| `superpowers:finishing-a-development-branch` | Completing feature branches — guides merge vs PR vs cleanup decision |
+| `ai-devkit:structured-debug` | Formal RCA for converter bugs, pool exhaustion, protocol mismatches |
+| `ai-devkit:verify` | Enforce evidence-based completion — no "it works" without command output |
+| `ai-devkit:security-review` / `aikido:scan` | After any change to OAuth, adapter, or credential-handling code |
+| `ai-devkit:simplify-implementation` / `simplify` | After complex fallback or converter changes — catches over-engineering |
+| `ai-devkit:code-review` | Pre-push review of `src/` changes against design intent |
+| `security-review` | Full branch security review before committing to main |
+| `adaptive-agent:skill-review` | Periodically — keeps all 14 project skills accurate and non-stale |
+| `remember:remember` | End of every significant session — saves state for clean continuation |
+| `severity1-marketplace:severity-classify` | Triage bugs by severity before acting |
+| `skill-creator:skill-creator` / `severity1-marketplace:prompt-improver` | Improve or create project skills |
+| `loop` / `schedule` | Poll `/provider_health` during active debugging; set up recurring health checks |
+
