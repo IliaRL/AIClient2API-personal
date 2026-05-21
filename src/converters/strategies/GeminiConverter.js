@@ -574,7 +574,7 @@ export class GeminiConverter extends BaseConverter {
      */
     toClaudeRequest(geminiRequest) {
         const claudeRequest = {
-            model: geminiRequest.model || 'claude-3-opus',
+            model: geminiRequest.model || 'claude-sonnet-4-5-20250929',
             messages: [],
             max_tokens: checkAndAssignOrDefault(geminiRequest.generationConfig?.maxOutputTokens, CLAUDE_DEFAULT_MAX_TOKENS),
             temperature: checkAndAssignOrDefault(geminiRequest.generationConfig?.temperature, CLAUDE_DEFAULT_TEMPERATURE),

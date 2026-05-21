@@ -93,7 +93,13 @@ export function overlayHealthFromDb(db, stmts, providerStatus, log) {
             const pool = providerStatus[providerType];
             pool.forEach((providerItem, idx) => {
                 const config = providerItem.config;
-                const row = (config.uuid && rowByUuid.get(config.uuid)) || rowByIndex.get(idx);
+                const rowByUuidMatch = config.uuid ? rowByUuid.get(config.uuid) : null;
+                const rowByIdxMatch  = rowByIndex.get(idx);
+                // Only use index match when the row UUID is absent or matches — prevents
+                // newly-added accounts from inheriting stale state from a prior account
+                // that occupied the same pool index.
+                const idxMatchSafe = rowByIdxMatch && (!rowByIdxMatch.uuid || !config.uuid || rowByIdxMatch.uuid === config.uuid);
+                const row = rowByUuidMatch || (idxMatchSafe ? rowByIdxMatch : null);
                 if (!row) return;
 
                 config.isHealthy              = row.is_healthy === 1;

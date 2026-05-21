@@ -206,6 +206,13 @@ function _applyBadRequestCooldown(providerPoolManager, toProvider, model, status
                 // Fallback: provider-type-wide cooldown (legacy behavior) only if uuid unavailable.
                 providerPoolManager.markModelCooldown(toProvider, model, 60000);
             }
+            // If this model has a fallback mapping, also apply a provider-level cooldown so that
+            // _hasAnyHealthyAccountForModel returns false immediately and Strategy B (modelFallbackMapping)
+            // fires on the very next retry — instead of cycling all accounts before falling back.
+            if (providerPoolManager.modelFallbackMapping?.[model] &&
+                typeof providerPoolManager.markModelCooldown === 'function') {
+                providerPoolManager.markModelCooldown(toProvider, model, 60000);
+            }
         } catch (e) {
             logger.warn(`[Provider Pool] markModelCooldown failed: ${e.message}`);
         }

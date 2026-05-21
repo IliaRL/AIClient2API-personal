@@ -1,6 +1,6 @@
 const http = require('http');
 
-const API_KEY = 'sk-a60f3efdf9b97e63c84ab4a3583f9d1c';
+const API_KEY = process.env.AICLIENT_TOKEN || 'sk-a60f3efdf9b97e63c84ab4a3583f9d1c';
 const PORT = 3000;
 const HOST = '127.0.0.1';
 
@@ -48,11 +48,12 @@ async function testChat(model) {
   const duration = Date.now() - start;
   if (res.statusCode === 200) {
     const json = JSON.parse(res.data);
-    console.log(`✅ Success (${duration}ms): ${json.content[0].text}`);
-    return duration;
+    const textBlock = Array.isArray(json.content) ? json.content.find(b => b.type === 'text') : null;
+    console.log(`✅ Success (${duration}ms): ${textBlock?.text ?? json.content?.[0]?.text}`);
+    return { duration, failed: false };
   } else {
     console.log(`❌ Failed (${res.statusCode}): ${res.data}`);
-    return duration;
+    return { duration, failed: true };
   }
 }
 
@@ -82,8 +83,10 @@ async function testStreaming(model) {
   const duration = Date.now() - start;
   if (res.statusCode === 200 && chunkCount > 0) {
     console.log(`✅ Success (${duration}ms, ${chunkCount} chunks received)`);
+    return false;
   } else {
     console.log(`❌ Failed (${res.statusCode}): ${res.data}`);
+    return true;
   }
 }
 
@@ -121,11 +124,14 @@ async function testToolUse(model) {
     const toolUse = json.content.find(c => c.type === 'tool_use');
     if (toolUse && toolUse.name === 'calculate_sum') {
       console.log(`✅ Success: Model called ${toolUse.name} with ${JSON.stringify(toolUse.input)}`);
+      return false;
     } else {
       console.log(`❌ Failed: No tool call found in response: ${JSON.stringify(json.content)}`);
+      return true;
     }
   } else {
     console.log(`❌ Failed (${res.statusCode}): ${res.data}`);
+    return true;
   }
 }
 
@@ -169,51 +175,57 @@ async function testSchemaGuard(model) {
       const argsType = typeof toolUse.input.args;
       if (argsType === 'string') {
         console.log(`✅ Success: Tool call argument was flattened to string: ${toolUse.input.args}`);
+        return false;
       } else {
         console.log(`❌ Failed: Argument remains ${argsType}, expected string. Value: ${JSON.stringify(toolUse.input.args)}`);
+        return true;
       }
     } else {
       console.log(`❌ Failed: No tool call found in response: ${JSON.stringify(json.content)}`);
+      return true;
     }
   } else {
     console.log(`❌ Failed (${res.statusCode}): ${res.data}`);
+    return true;
   }
 }
 
 async function run() {
   console.log('Starting Master Smoke Test...');
+  let failedSuites = 0;
 
   // 1. Antigravity Warmup Test
   console.log('\n--- 1. Antigravity Warmup ---');
-  const duration1 = await testChat('gemini-3-flash');
-  if (duration1 > 30000) {
+  const result1 = await testChat('gemini-3-flash');
+  if (result1.failed) failedSuites++;
+  if (result1.duration > 30000) {
     console.log('ℹ️ First call took >30s (expected for Antigravity OAuth bootstrap)');
   } else {
-    console.log(`ℹ️ First call took ${duration1}ms (already warm or fast)`);
+    console.log(`ℹ️ First call took ${result1.duration}ms (already warm or fast)`);
   }
 
   // 2. Chat Test (Other provider)
   console.log('\n--- 2. Standard Chat ---');
-  await testChat('claude-sonnet-4-6');
+  if ((await testChat('claude-sonnet-4-5-20250929')).failed) failedSuites++;
 
   // 3. Streaming Test
   console.log('\n--- 3. Streaming ---');
-  await testStreaming('claude-sonnet-4-6');
+  if (await testStreaming('claude-sonnet-4-5-20250929')) failedSuites++;
 
   // 4. Tool Use Test
   console.log('\n--- 4. Tool Use ---');
-  await testToolUse('claude-sonnet-4-6');
+  if (await testToolUse('claude-sonnet-4-5-20250929')) failedSuites++;
 
   // 5. Schema Guard Test (Flattening)
   console.log('\n--- 5. Schema Guard (Flattening) ---');
-  await testSchemaGuard('claude-sonnet-4-6');
+  if (await testSchemaGuard('claude-sonnet-4-5-20250929')) failedSuites++;
 
   // 6. Claude-pick Routing Test
   console.log('\n--- 6. Claude-pick Routing (High-Tier) ---');
   // Tests the routing for models typically used by claude-pick
-  const highTierModels = ['claude-sonnet-4-6', 'gemini-3.1-pro-low', 'gpt-4o'];
+  const highTierModels = ['claude-sonnet-4-5-20250929', 'gemini-3.1-pro-low', 'gpt-4o'];
   for (const model of highTierModels) {
-    await testChat(model);
+    if ((await testChat(model)).failed) failedSuites++;
   }
 
   // 7. Identity Verification Test
@@ -232,10 +244,15 @@ async function run() {
       console.log('✅ Success: Model identity preserved in response');
     } else {
       console.log(`❌ Failed: Model identity mismatch. Expected gemini-3-flash, got ${json.model}`);
+      failedSuites++;
     }
+  } else {
+    console.log(`❌ Failed (${identityRes.statusCode}): ${identityRes.data}`);
+    failedSuites++;
   }
 
-  console.log('\nMaster Smoke Test Completed.');
+  console.log(`\nMaster Smoke Test Completed. ${failedSuites} suite(s) failed.`);
+  process.exit(failedSuites > 0 ? 1 : 0);
 }
 
 run().catch(err => {

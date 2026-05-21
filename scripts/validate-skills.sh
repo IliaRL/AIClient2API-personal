@@ -61,20 +61,20 @@ check "routing" "normalizeConfiguredProviders in config-manager.js:12" \
   "grep -n 'normalizeConfiguredProviders' '$SRC/core/config-manager.js' | head -1 | grep -q '12:'"
 check "routing" "handleAPIRequests in api-manager.js:32" \
   "grep -n 'handleAPIRequests' '$SRC/services/api-manager.js' | head -1 | grep -q '32:'"
-check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:542" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '542:'"
+check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:549" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '549:'"
 check "routing" "handleModelListRequest in request-handlers.js (model aggregation)" \
   "grep -q 'handleModelListRequest' '$SRC/utils/request-handlers.js'"
 
 # ── aiclient-statusline ───────────────────────────────────────────────────────
 echo ""
 echo "[ aiclient-statusline ]"
-check "statusline" "updateLastModelFile writes /tmp/aiclient_last_model at request-handlers.js:298" \
-  "grep -n 'aiclient_last_model' '$SRC/utils/request-handlers.js' | head -1 | grep -q '298:'"
-check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:542" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '542:'"
-check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:851" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '851:'"
+check "statusline" "updateLastModelFile writes /tmp/aiclient_last_model at request-handlers.js:305" \
+  "grep -n 'aiclient_last_model' '$SRC/utils/request-handlers.js' | head -1 | grep -q '305:'"
+check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:549" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '549:'"
+check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:858" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '858:'"
 
 # ── aiclient-debug ────────────────────────────────────────────────────────────
 echo ""
@@ -129,8 +129,8 @@ check "providers" "registerAdapter calls in adapter.js:704+" \
   "grep -n 'registerAdapter' '$SRC/providers/adapter.js' | sed -n '2p' | grep -q '704:'"
 check "providers" "refreshToken check in provider-pool-manager.js:491" \
   "grep -n 'refreshToken' '$SRC/providers/provider-pool-manager.js' | awk -F: '{if(\$1>=480 && \$1<=505) found=1} END{exit !found}'"
-check "providers" "DEFAULT_HEALTH_CHECK_MODELS in provider-pool-manager.js:51" \
-  "grep -n 'DEFAULT_HEALTH_CHECK_MODELS' '$SRC/providers/provider-pool-manager.js' | head -1 | grep -q '51:'"
+check "providers" "DEFAULT_HEALTH_CHECK_MODELS in provider-pool-manager.js:52" \
+  "grep -n 'DEFAULT_HEALTH_CHECK_MODELS' '$SRC/providers/provider-pool-manager.js' | head -1 | grep -q '52:'"
 check "providers" "PROVIDER_MAPPINGS in provider-utils.js:14" \
   "grep -n 'PROVIDER_MAPPINGS' '$SRC/utils/provider-utils.js' | head -1 | grep -q '14:'"
 check "providers" "normalizeConfiguredProviders in config-manager.js:12" \
@@ -180,6 +180,14 @@ check "modular" "network-utils.js exports sharedHttpAgent" \
   "grep -q 'export.*sharedHttpAgent' '$SRC/utils/network-utils.js'"
 check "modular" "network-utils.js exports isRetryableNetworkError" \
   "grep -q 'export function isRetryableNetworkError' '$SRC/utils/network-utils.js'"
+check "modular" "cockpit-quota.js exports getQuotaPenalty" \
+  "grep -q 'export function getQuotaPenalty' '$SRC/utils/cockpit-quota.js'"
+check "modular" "cockpit-quota.js exports start" \
+  "grep -q 'export function start' '$SRC/utils/cockpit-quota.js'"
+check "modular" "cockpit-quota imported in provider-pool-manager.js" \
+  "grep -q 'cockpit-quota' '$SRC/providers/provider-pool-manager.js'"
+check "modular" "cockpitQuota.start() called in api-server.js" \
+  "grep -q 'cockpitQuota.start' '$SRC/services/api-server.js'"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

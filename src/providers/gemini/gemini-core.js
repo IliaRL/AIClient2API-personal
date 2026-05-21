@@ -9,7 +9,7 @@ import * as os from 'os';
 import * as readline from 'readline';
 import open from 'open';
 import { configureTLSSidecar } from '../../utils/proxy-utils.js';
-import { API_ACTIONS, formatExpiryTime, isRetryableNetworkError, formatExpiryLog, getRetryAfterMs } from '../../utils/common.js';
+import { API_ACTIONS, formatExpiryTime, isRetryableNetworkError, formatExpiryLog } from '../../utils/common.js';
 import { getProviderModels } from '../provider-models.js';
 import { handleGeminiCliOAuth } from '../../auth/oauth-handlers.js';
 import { getProxyConfigForProvider, getGoogleAuthProxyConfig, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
@@ -620,19 +620,11 @@ export class GeminiApiService {
                 throw error;
             }
 
-            // Handle 429 (Too Many Requests)
+            // Handle 429 — throw immediately to trigger account rotation in pool manager.
+            // Per-account backoff wastes 6+ seconds per exhausted account; with 13 accounts
+            // the pool manager rotates in <1ms, so backoff here is strictly additive latency.
             if (status === 429) {
-                const retryAfter = getRetryAfterMs(error);
-                if (retryAfter !== null) {
-                    logger.warn(`[Gemini API] Received 429 with Retry-After: ${retryAfter}ms. Throwing to upper layer.`);
-                    throw error;
-                }
-                if (retryCount < maxRetries) {
-                    const delay = baseDelay * Math.pow(2, retryCount);
-                    logger.info(`[Gemini API] Received 429 (Too Many Requests). No Retry-After found. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    return this.callApi(method, body, isRetry, retryCount + 1, model);
-                }
+                throw error;
             }
 
             // Handle other retryable errors (5xx server errors)
@@ -710,20 +702,9 @@ export class GeminiApiService {
                 throw error;
             }
 
-            // Handle 429 (Too Many Requests)
+            // Handle 429 — throw immediately to trigger account rotation in pool manager.
             if (status === 429) {
-                const retryAfter = getRetryAfterMs(error);
-                if (retryAfter !== null) {
-                    logger.warn(`[Gemini API] Received 429 with Retry-After: ${retryAfter}ms during stream. Throwing to upper layer.`);
-                    throw error;
-                }
-                if (retryCount < maxRetries) {
-                    const delay = baseDelay * Math.pow(2, retryCount);
-                    logger.info(`[Gemini API] Received 429 (Too Many Requests) during stream. No Retry-After found. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    yield* this.streamApi(method, body, isRetry, retryCount + 1, model);
-                    return;
-                }
+                throw error;
             }
 
             // Handle other retryable errors (5xx server errors)

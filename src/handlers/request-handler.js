@@ -14,6 +14,7 @@ import { PROMPT_LOG_FILENAME } from '../core/config-manager.js';
 import { getPluginManager } from '../core/plugin-manager.js';
 import { randomUUID } from 'crypto';
 import { handleGrokAssetsProxy } from '../utils/grok-assets-proxy.js';
+import { createTrace, pushTrace, getAllTraces, getTrace, serializeTraceForHeader } from '../utils/trace-buffer.js';
 
 /**
  * Generate a short unique request ID (8 characters)
@@ -58,6 +59,46 @@ export function createRequestHandler(config, providerPoolManager) {
                 // Deep copy the config for each request to allow dynamic modification
                 const currentConfig = deepmerge({}, config);
                 currentConfig._monitorRequestId = requestId;
+
+                // ---- Diagnostic trace (lives for the entire request lifecycle) ----
+                const trace = createTrace(requestId);
+                trace.debugRequested = req.headers['x-debug-trace'] === '1' || req.headers['x-debug-trace'] === 'true';
+                currentConfig._trace = trace;
+                // Inject X-Proxy-Trace header just before response headers flush.
+                // For both unary (writeHead) and stream (writeHead happens early via
+                // handleUnifiedResponse), wrap res.writeHead so the trace header is
+                // attached using whatever state the trace has at flush time.
+                if (trace.debugRequested) {
+                    const origWriteHead = res.writeHead.bind(res);
+                    res.writeHead = function patchedWriteHead(...args) {
+                        try {
+                            // Snapshot current trace; for stream this fires early (TTFT/upstream pending),
+                            // so caller will primarily inspect proxyOverheadMs + model/provider here.
+                            res.setHeader('X-Proxy-Trace', serializeTraceForHeader(trace));
+                        } catch (_) { /* best-effort */ }
+                        return origWriteHead(...args);
+                    };
+                }
+                // Finalize on response end/close so trace gets pushed exactly once.
+                let traceFinalized = false;
+                const finalizeTrace = (status) => {
+                    if (traceFinalized) return;
+                    traceFinalized = true;
+                    trace.totalRTTMs = Date.now() - trace.startedAt;
+                    if (status) trace.status = status;
+                    else if (trace.status === 'pending') trace.status = 'ok';
+                    pushTrace(trace);
+                    // Append a trailer with final trace (works on HTTP/1.1 chunked responses).
+                    if (trace.debugRequested) {
+                        try {
+                            if (res.addTrailers && !res.writableEnded) {
+                                res.addTrailers({ 'X-Proxy-Trace-Final': serializeTraceForHeader(trace) });
+                            }
+                        } catch (_) { /* best-effort */ }
+                    }
+                };
+                res.on('close', () => finalizeTrace());
+                res.on('finish', () => finalizeTrace());
                 
                 // 计算当前请求的基础 URL
                 const protocol = req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
@@ -184,6 +225,32 @@ export function createRequestHandler(config, providerPoolManager) {
                         }
                     }
 
+
+                    // Diagnostic trace ring buffer endpoint
+                    // GET /v1/trace           → JSON array of all buffered traces (max 100)
+                    // GET /v1/trace/:requestId → single trace or 404
+                    if (method === 'GET' && (path === '/v1/trace' || path.startsWith('/v1/trace/'))) {
+                        try {
+                            if (path === '/v1/trace') {
+                                res.writeHead(200, { 'Content-Type': 'application/json' });
+                                res.end(JSON.stringify(getAllTraces()));
+                            } else {
+                                const id = path.slice('/v1/trace/'.length);
+                                const found = getTrace(id);
+                                if (!found) {
+                                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                                    res.end(JSON.stringify({ error: 'trace not found', requestId: id }));
+                                } else {
+                                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                                    res.end(JSON.stringify(found));
+                                }
+                            }
+                            return true;
+                        } catch (error) {
+                            handleError(res, { status: 500, message: `trace endpoint error: ${error.message}` }, currentConfig.MODEL_PROVIDER, null, req);
+                            return;
+                        }
+                    }
 
                     // Handle API requests
                     // Allow overriding MODEL_PROVIDER via request header

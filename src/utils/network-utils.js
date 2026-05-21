@@ -189,7 +189,8 @@ export function isAuthorized(req, requestUrl, REQUIRED_API_KEY) {
         if (authHeader.substring(7) === REQUIRED_API_KEY) return true;
     }
     if (queryKey === REQUIRED_API_KEY || googApiKey === REQUIRED_API_KEY || claudeApiKey === REQUIRED_API_KEY) return true;
-    logger.info(`[Auth] Unauthorized request denied. Bearer: "${authHeader ? 'present' : 'N/A'}", Query Key: "${queryKey}", x-goog-api-key: "${googApiKey}", x-api-key: "${claudeApiKey}"`);
+    const redact = (v) => v ? `${v.substring(0, 8)}...` : 'N/A';
+    logger.info(`[Auth] Unauthorized request denied. Bearer: "${authHeader ? 'present' : 'N/A'}", Query Key: "${redact(queryKey)}", x-goog-api-key: "${redact(googApiKey)}", x-api-key: "${redact(claudeApiKey)}"`);
     return false;
 }
 

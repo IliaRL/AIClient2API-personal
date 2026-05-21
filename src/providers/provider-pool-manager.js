@@ -14,6 +14,7 @@ import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { ENDPOINT_TYPE } from '../utils/common.js';
 import { CooldownManager } from './cooldown-manager.js';
 import { initDb, persistHealthToDb, overlayHealthFromDb, debouncedSave, flushPendingSaves } from './persistence-manager.js';
+import * as cockpitQuota from '../utils/cockpit-quota.js';
 
 function getCustomModelAliasesForProvider(config, providerType) {
     const customModels = Array.isArray(config?.customModels) ? config.customModels : [];
@@ -54,7 +55,7 @@ export class ProviderPoolManager {
         'openai-custom': 'gpt-4o-mini',
         'nvidia-nim': 'meta/llama-3.3-70b-instruct',
         'github-models': 'gpt-4o-mini',
-        'claude-custom': 'claude-3-7-sonnet-20250219',
+        'claude-custom': 'claude-sonnet-4-5-20250929',
         'claude-kiro-oauth': 'claude-haiku-4-5',
         'openai-qwen-oauth': 'qwen3-coder-flash',
         'openai-iflow': 'qwen3-coder-plus',
@@ -175,32 +176,39 @@ export class ProviderPoolManager {
                 // 排除禁用的节点（不健康节点也应允许尝试刷新以恢复健康）
                 if (config.isDisabled) continue;
 
-                if (configPath && fs.existsSync(configPath)) {
+                // Use in-memory cached expiry (set after successful refresh) to avoid blocking readFileSync on cron.
+                // Fall back to disk read only once per account (populates the cache for future runs).
+                let expiryTime = config.tokenExpiresAt ?? null;
+
+                if (expiryTime === null && configPath && fs.existsSync(configPath)) {
                     try {
                         const fileContent = fs.readFileSync(configPath, 'utf-8');
                         const credData = JSON.parse(fileContent);
                         const rawExpiryTime = credData.expiry_date ?? credData.expiry ?? credData.expires_at ?? credData.expiresAt;
-                        let expiryTime = null;
                         if (typeof rawExpiryTime === 'number') {
                             expiryTime = rawExpiryTime;
                         } else if (typeof rawExpiryTime === 'string') {
                             const parsedDate = Date.parse(rawExpiryTime);
                             expiryTime = Number.isNaN(parsedDate) ? Number(rawExpiryTime) : parsedDate;
                         }
-                        const nearExpiryMs = (this.globalConfig?.CRON_NEAR_MINUTES || 10) * 60 * 1000;
-                        if (!Number.isFinite(expiryTime)) {
-                            // 凭据文件缺少 expiry 字段，无法判断是否快过期，作为安全措施强制刷新
-                            this._log('warn', `Node ${this._getDisplayName(config)} (${providerType}) has no expiry field. Forcing refresh as safety measure...`);
-                            this._enqueueRefresh(providerType, providerStatus);
-                        } else if ((expiryTime - Date.now()) < nearExpiryMs) {
-                            this._log('warn', `Node ${this._getDisplayName(config)} (${providerType}) is near expiration. Enqueuing refresh...`);
-                            this._enqueueRefresh(providerType, providerStatus);
-                        }
+                        // Cache for subsequent cron runs — only invalidated when _refreshNodeToken succeeds
+                        if (Number.isFinite(expiryTime)) config.tokenExpiresAt = expiryTime;
                     } catch (err) {
                         this._log('error', `Failed to check expiry for node ${this._getDisplayName(config)}: ${err.message}`);
                     }
-                } else {
+                } else if (expiryTime === null && (!configPath || !fs.existsSync(configPath))) {
                     this._log('debug', `Node ${this._getDisplayName(config)} (${providerType}) has no valid config file path or file does not exist.`);
+                }
+
+                if (expiryTime !== null) {
+                    const nearExpiryMs = (this.globalConfig?.CRON_NEAR_MINUTES || 10) * 60 * 1000;
+                    if (!Number.isFinite(expiryTime)) {
+                        this._log('warn', `Node ${this._getDisplayName(config)} (${providerType}) has no expiry field. Forcing refresh as safety measure...`);
+                        this._enqueueRefresh(providerType, providerStatus);
+                    } else if ((expiryTime - Date.now()) < nearExpiryMs) {
+                        this._log('warn', `Node ${this._getDisplayName(config)} (${providerType}) is near expiration. Enqueuing refresh...`);
+                        this._enqueueRefresh(providerType, providerStatus);
+                    }
                 }
             }
         }
@@ -220,16 +228,18 @@ export class ProviderPoolManager {
             const pool = this.providerStatus[type];
             
             // 挑选当前提供商下需要预热的节点
-            const candidates = pool
-                .filter(p => p.config.isHealthy && !p.config.isDisabled && !this.refreshingUuids.has(p.uuid))
+            const filtered = pool.filter(p => p.config.isHealthy && !p.config.isDisabled && !this.refreshingUuids.has(p.uuid));
+            const warmupMinSeq = filtered.reduce((min, p) => Math.min(min, p.config._lastSelectionSeq || 0), Infinity);
+            const warmupNow = Date.now();
+            const candidates = filtered
                 .sort((a, b) => {
                     // 优先级 A: 明确标记需要刷新的
                     if (a.config.needsRefresh && !b.config.needsRefresh) return -1;
                     if (!a.config.needsRefresh && b.config.needsRefresh) return 1;
 
                     // 优先级 B: 按照正常的选择权重排序（最久没用过的优先补）
-                    const scoreA = this._calculateNodeScore(a);
-                    const scoreB = this._calculateNodeScore(b);
+                    const scoreA = this._calculateNodeScore(a, warmupNow, warmupMinSeq);
+                    const scoreB = this._calculateNodeScore(b, warmupNow, warmupMinSeq);
                     return scoreA - scoreB;
                 })
                 .slice(0, this.warmupTarget);
@@ -510,10 +520,12 @@ export class ProviderPoolManager {
                 if (refreshResult === true) {
                     this._log('info', `Token refresh successful for node ${this._getDisplayName(config)} (Duration: ${duration}ms)`);
                     config.lastRefreshTime = Date.now(); // 记录最后实际刷新成功时间
+                    // Invalidate cached expiry so checkAndRefreshExpiringNodes re-reads the new value from disk once
+                    delete config.tokenExpiresAt;
                 } else {
                     this._log('info', `Token refresh no-op for node ${this._getDisplayName(config)} (Already valid)`);
                 }
-                
+
                 // 刷新流程结束（无论是否真正刷新），重置状态
                 config.needsRefresh = false;
                 config.refreshCount = 0;
@@ -583,7 +595,7 @@ export class ProviderPoolManager {
      * 分数越低，优先级越高
      * @private
      */
-    _calculateNodeScore(providerStatus, now = Date.now(), minSeqInPool = -1) {
+    _calculateNodeScore(providerStatus, now = Date.now(), minSeqInPool = -1, requestedModel = null) {
         const config = providerStatus.config;
         const state = providerStatus.state;
         
@@ -634,7 +646,8 @@ export class ProviderPoolManager {
         // 新鲜节点的微调：配合 usageScore 和 sequenceScore 在多个新鲜节点间轮询
         const freshBonus = isFresh ? (now - lastHealthCheckTime) : 0;
 
-        return baseScore + usageScore + sequenceScore + loadScore + freshBonus;
+        const quotaPenalty = cockpitQuota.getQuotaPenalty(config.customName, requestedModel);
+        return baseScore + usageScore + sequenceScore + loadScore + freshBonus + quotaPenalty;
     }
 
     /**
@@ -1090,8 +1103,8 @@ export class ProviderPoolManager {
         // 改进：使用统一的评分策略进行选择
         // 传入当前时间戳 now 确保一致性
         const selected = availableAndHealthyProviders.sort((a, b) => {
-            const scoreA = this._calculateNodeScore(a, now, minSeq);
-            const scoreB = this._calculateNodeScore(b, now, minSeq);
+            const scoreA = this._calculateNodeScore(a, now, minSeq, requestedModel);
+            const scoreB = this._calculateNodeScore(b, now, minSeq, requestedModel);
             if (scoreA !== scoreB) return scoreA - scoreB;
             // 如果分值相同，使用 UUID 排序确保确定性
             return a.uuid < b.uuid ? -1 : 1;
@@ -1324,6 +1337,9 @@ export class ProviderPoolManager {
             if (!Array.isArray(accounts)) continue;
             // Skip provider types that are on model-level cooldown for this model
             if (this.isModelOnCooldown(providerType, modelId)) continue;
+            // Skip provider types that don't include this model in their catalog
+            const providerModels = getProviderModels(providerType);
+            if (providerModels.length > 0 && !providerModels.includes(modelId)) continue;
             const anyHealthy = accounts.some(acct => {
                 const cfg = acct?.config;
                 if (!cfg) return false;
@@ -1331,6 +1347,9 @@ export class ProviderPoolManager {
                 if (cfg.isDisabled) return false;
                 if (cfg.needsReauth) return false;
                 if (this._accountHasModelCooldown(cfg, modelId)) return false;
+                // Also check per-account configured supported models
+                const supported = getConfiguredSupportedModels(providerType, cfg);
+                if (supported.length > 0 && !supported.includes(modelId)) return false;
                 return true;
             });
             if (anyHealthy) return true;
@@ -1338,15 +1357,6 @@ export class ProviderPoolManager {
         return false;
     }
 
-    /**
-     * Selects a provider from the pool with fallback support.
-     * When the primary provider type has no healthy providers, it will try fallback types.
-     * @param {string} providerType - The primary type of provider to select.
-     * @param {string} [requestedModel] - Optional. The model name to filter providers by.
-     * @param {Object} [options] - Optional. Additional options.
-     * @param {boolean} [options.skipUsageCount] - Optional. If true, skip incrementing usage count.
-     * @returns {object|null} An object containing the selected provider's configuration and the actual provider type used, or null if no healthy provider is found.
-     */
     /**
      * Selects a provider from the pool with fallback support.
      * When the primary provider type has no healthy providers, it will try fallback types.
@@ -1394,16 +1404,7 @@ export class ProviderPoolManager {
 
             // 如果是 fallback 类型，需要检查模型兼容性
             if (currentType !== providerType && requestedModel) {
-                // 检查协议前缀是否兼容
-                const primaryProtocol = getProtocolPrefix(providerType);
-                const fallbackProtocol = getProtocolPrefix(currentType);
-                
-                if (primaryProtocol !== fallbackProtocol) {
-                    this._log('debug', `Skipping fallback type ${currentType}: protocol mismatch (${primaryProtocol} vs ${fallbackProtocol})`);
-                    continue;
-                }
-
-                // 检查 fallback 类型是否支持请求的模型
+                // 检查 fallback 类型是否支持请求的模型（协议转换由 converter 层处理，不需要限制前缀匹配）
                 const supportedModels = getProviderModels(currentType);
                 if (supportedModels.length > 0 && !supportedModels.includes(requestedModel)) {
                     this._log('debug', `Skipping fallback type ${currentType}: model ${requestedModel} not supported`);
@@ -1450,57 +1451,19 @@ export class ProviderPoolManager {
             const targetModel = mapping.targetModel;
 
             if (targetProviderType && targetModel) {
-                this._log('info', `Trying Model Fallback Mapping for ${requestedModel}: -> ${targetProviderType} (${targetModel})`);
-                
-                // 递归调用 selectProviderWithFallback，但这次针对目标提供商类型
-                // 注意：这里我们直接尝试从目标提供商池中选择，因为如果再次递归可能会导致死循环或逻辑复杂化
-                // 简单起见，我们直接尝试选择目标提供商
-                
-                // 检查目标类型是否有配置的池
-                if (this.providerStatus[targetProviderType] && this.providerStatus[targetProviderType].length > 0) {
-                    // 尝试从目标类型选择提供商（使用转换后的模型名，现在是异步的）
-                    const selectedConfig = await this.selectProvider(targetProviderType, targetModel, options);
-                    
-                    if (selectedConfig) {
-                        this._log('info', `Fallback activated (Model Mapping): ${providerType} (${requestedModel}) -> ${targetProviderType} (${targetModel}) (node: ${this._getDisplayName(selectedConfig)})`);
-                        return {
-                            config: selectedConfig,
-                            actualProviderType: targetProviderType,
-                            isFallback: true,
-                            actualModel: targetModel // 返回实际使用的模型名，供上层进行请求转换
-                        };
-                    } else {
-                        // 如果目标类型的主池也不可用，尝试目标类型的 fallback chain
-                        // 例如 claude-kiro-oauth (mapped) -> claude-custom (chain)
-                        // 这需要我们小心处理，避免无限递归。
-                        // 我们可以手动检查目标类型的 fallback chain
-                        
-                        const targetFallbackTypes = this.fallbackChain[targetProviderType] || [];
-                        for (const fallbackType of targetFallbackTypes) {
-                             // 检查协议兼容性 (目标类型 vs 它的 fallback)
-                             const targetProtocol = getProtocolPrefix(targetProviderType);
-                             const fallbackProtocol = getProtocolPrefix(fallbackType);
-                             
-                             if (targetProtocol !== fallbackProtocol) continue;
-                             
-                             // 检查模型支持
-                             const supportedModels = getProviderModels(fallbackType);
-                             if (supportedModels.length > 0 && !supportedModels.includes(targetModel)) continue;
-                             
-                             const fallbackSelectedConfig = await this.selectProvider(fallbackType, targetModel, options);
-                             if (fallbackSelectedConfig) {
-                                 this._log('info', `Fallback activated (Model Mapping -> Chain): ${providerType} (${requestedModel}) -> ${targetProviderType} -> ${fallbackType} (${targetModel}) (node: ${this._getDisplayName(fallbackSelectedConfig)})`);
-                                 return {
-                                     config: fallbackSelectedConfig,
-                                     actualProviderType: fallbackType,
-                                     isFallback: true,
-                                     actualModel: targetModel
-                                 };
-                             }
-                        }
-                    }
+                // Guard against cycles in modelFallbackMapping via a triedModels set in options
+                const triedModels = options._triedModels || new Set();
+                if (triedModels.has(requestedModel)) {
+                    this._log('warn', `Model Fallback cycle detected for ${requestedModel} — skipping`);
                 } else {
-                    this._log('warn', `Model Fallback target provider ${targetProviderType} not configured or empty.`);
+                    this._log('info', `Trying Model Fallback Mapping for ${requestedModel}: -> ${targetProviderType} (${targetModel})`);
+                    triedModels.add(requestedModel);
+                    // Recurse fully — lets the target model follow its own chain and modelFallbackMapping entries
+                    const result = await this.selectProviderWithFallback(targetProviderType, targetModel, { ...options, _triedModels: triedModels });
+                    if (result) {
+                        this._log('info', `Fallback activated (Model Mapping): ${providerType} (${requestedModel}) -> ${result.actualProviderType} (${result.actualModel})`);
+                        return { ...result, isFallback: true };
+                    }
                 }
             }
         }
@@ -1962,7 +1925,7 @@ export class ProviderPoolManager {
             this._log('info', `Reset refresh status and marked healthy for provider ${this._getDisplayName(provider.config)} (${providerType})`);
 
             // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, providerConfig.uuid));
+            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.config.uuid));
 
             this._debouncedSave(providerType);
         }

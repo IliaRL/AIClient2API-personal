@@ -80,6 +80,9 @@ export const MODEL_MAX_OUTPUT_TOKENS = {
     'claude-haiku-4-5': 32000,
     'claude-sonnet-4-5': 64000,
     'claude-sonnet-4-5-20250929': 64000,
+    'claude-opus-4-5': 32000,
+    'claude-opus-4-6': 32000,
+    'claude-opus-4-7': 32000,
     // OpenAI Codex OAuth
     'gpt-5.2': 32768,
     'gpt-5.3-codex': 32768,
@@ -130,6 +133,9 @@ export const MODEL_CONTEXT_WINDOWS = {
     'claude-haiku-4-5': 200000,
     'claude-sonnet-4-5': 200000,
     'claude-sonnet-4-5-20250929': 200000,
+    'claude-opus-4-5': 1000000,
+    'claude-opus-4-6': 1000000,
+    'claude-opus-4-7': 1000000,
     // OpenAI Codex OAuth
     'gpt-5.2': 128000,
     'gpt-5.3-codex': 128000,

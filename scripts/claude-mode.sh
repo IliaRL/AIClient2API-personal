@@ -27,7 +27,7 @@ fi
 
 CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
 CLAUDE_PROXY_BACKUP_FILE="${CLAUDE_PROXY_BACKUP_FILE:-$HOME/.claude/proxy_settings_backup.json}"
-ANTIGRAVITY_SETTINGS_FILE="${ANTIGRAVITY_SETTINGS_FILE:-$HOME/Library/Application Support/Antigravity/User/profiles/-1cd01272/settings.json}"
+ANTIGRAVITY_SETTINGS_FILE="${ANTIGRAVITY_SETTINGS_FILE:-$HOME/Library/Application Support/Antigravity IDE/User/settings.json}"
 
 # Single source of truth for the proxy address/token. Override via env before sourcing.
 : "${AICLIENT_BASE:=http://127.0.0.1:3000}"
@@ -141,6 +141,28 @@ claude-proxy() {
 
 claude-native() {
   _claude_mode_require_jq || return 1
+
+  # Kill the proxy process when leaving proxy mode so it doesn't linger.
+  local PORT=3000
+  local PID
+  PID=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)
+  if [ -n "$PID" ]; then
+    echo "🛑 Stopping proxy process (PID $PID)..."
+    kill "$PID" 2>/dev/null
+    for i in $(seq 1 8); do
+      if [ -z "$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)" ]; then
+        break
+      fi
+      sleep 0.5
+    done
+    local REMAIN
+    REMAIN=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)
+    if [ -n "$REMAIN" ]; then
+      echo "⚠️  Process still listening, sending SIGKILL..."
+      kill -9 "$REMAIN" 2>/dev/null
+      sleep 1
+    fi
+  fi
 
   # Back up current proxy settings (if any) before removing them.
   if [ -f "$CLAUDE_SETTINGS_FILE" ]; then

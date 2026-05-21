@@ -12,7 +12,7 @@ import * as readline from 'readline';
 import { v4 as uuidv4 } from 'uuid';
 import open from 'open';
 import { configureTLSSidecar } from '../../utils/proxy-utils.js';
-import { formatExpiryTime, isRetryableNetworkError, formatExpiryLog, getRetryAfterMs } from '../../utils/common.js';
+import { formatExpiryTime, isRetryableNetworkError, formatExpiryLog } from '../../utils/common.js';
 import { getProviderModels } from '../provider-models.js';
 import { handleGeminiAntigravityOAuth } from '../../auth/oauth-handlers.js';
 import { getProxyConfigForProvider, getGoogleAuthProxyConfig, isTLSSidecarEnabledForProvider } from '../../utils/proxy-utils.js';
@@ -72,10 +72,33 @@ function isImageModel(modelName) {
 function modelSupportsThinking(modelName) {
     if (!modelName) return false;
     const name = modelName.toLowerCase();
-    // 支持 thinking 的模型：gemini-3*, gemini-2.5-*, claude-*-thinking
-    return name.startsWith('gemini-3') ||
-           name.startsWith('gemini-2.5-') ||
-           name.includes('-thinking');
+
+    // 1. Explicit -thinking suffix (highest priority)
+    if (name.includes('-thinking')) return true;
+
+    // 2. Gemini models that support thinking
+    if (name.startsWith('gemini-3') || name.startsWith('gemini-2.5-')) return true;
+
+    // 3. Claude models: only Opus/Sonnet 4.6+ support thinking (Haiku never does)
+    if (name.includes('claude')) {
+        // Haiku never supports thinking
+        if (name.includes('haiku')) return false;
+
+        // Extract version numbers (e.g., "4-6" or "4-5")
+        const versionMatch = name.match(/(\d+)-(\d+)/);
+        if (versionMatch) {
+            const major = parseInt(versionMatch[1], 10);
+            const minor = parseInt(versionMatch[2], 10);
+
+            // Opus and Sonnet 4.6+ support thinking
+            if ((name.includes('opus') || name.includes('sonnet')) &&
+                (major > 4 || (major === 4 && minor >= 6))) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -281,6 +304,11 @@ function geminiToAntigravity(modelName, payload, projectId) {
         if (template.request.generationConfig && template.request.generationConfig.maxOutputTokens) {
             delete template.request.generationConfig.maxOutputTokens;
         }
+        // Remove an empty generationConfig entirely — some models reject {} as invalid argument.
+        if (template.request.generationConfig &&
+            Object.keys(template.request.generationConfig).length === 0) {
+            delete template.request.generationConfig;
+        }
     }
 
     // 处理 Thinking 配置
@@ -294,16 +322,16 @@ function geminiToAntigravity(modelName, payload, projectId) {
         }
     }
 
-    // Antigravity 的 gemini-3.1-pro 模型必须显式声明 thinkingLevel；缺失时上游会返回 400 invalid argument。
-    // 我们用模型名后缀 ("-high"/"-low") 推断默认 thinkingLevel，避免客户端必须显式传 reasoning_effort 才能工作。
-    if (modelName === 'gemini-3.1-pro-high' || modelName === 'gemini-3.1-pro-low') {
+    // gemini-3.1-pro-low requires explicit thinkingConfig with LOW level.
+    // gemini-3.1-pro-high is handled by its model name alone (no explicit thinkingConfig needed);
+    // the -high suffix tells the staging API to use the full reasoning budget.
+    if (modelName === 'gemini-3.1-pro-low') {
         template.request.generationConfig = template.request.generationConfig || {};
         template.request.generationConfig.thinkingConfig = template.request.generationConfig.thinkingConfig || {};
         const tc = template.request.generationConfig.thinkingConfig;
         if (tc.thinkingLevel === undefined || tc.thinkingLevel === null || tc.thinkingLevel === '') {
-            tc.thinkingLevel = modelName === 'gemini-3.1-pro-high' ? 'HIGH' : 'LOW';
+            tc.thinkingLevel = 'LOW';
         }
-        // includeThoughts 必须为 true 才能稳定回传 thought parts
         if (tc.includeThoughts === undefined) tc.includeThoughts = true;
     }
 
@@ -686,6 +714,13 @@ function ensureRolesInContents(requestBody, modelName) {
     }
 
     return requestBody;
+}
+
+// Claude model names inside Antigravity payloads are bare ('claude-sonnet-4-6') but the
+// pool manager tracks them under their routing key ('gemini-claude-sonnet-4-6').
+// Use this helper so cooldowns set by the adapter always match what selectProvider checks.
+function toPoolModelKey(modelId) {
+    return (modelId && modelId.startsWith('claude-')) ? `gemini-${modelId}` : modelId;
 }
 
 export class AntigravityApiService {
@@ -1163,21 +1198,60 @@ export class AntigravityApiService {
                 const reason = is403 ? '403 Permission Denied' : '401 Unauthorized';
                 logger.info(`[Antigravity API] Received ${status}. Triggering credential switch via PoolManager...`);
 
+                // Distinguish account-fatal 403 (bootstrap or GCP-project broken) from
+                // model-specific 403 (transient or model-tier denial). Bootstrap methods
+                // (loadCodeAssist/onboardUser) failing 403 means the account's GCP project
+                // does not have the Gemini-for-Cloud API enabled — account-dark is correct.
+                // For generateContent/streamGenerateContent 403s without that fatal signature,
+                // apply per-account model cooldown so OTHER accounts can serve this model.
+                //
+                // Special case: "Gemini for Google Cloud API (Staging) has not been used in
+                // project X" on a generateContent call means only the staging endpoint is
+                // missing — the account can still serve non-staging models (gemini-3-flash etc).
+                // Use a 24h model cooldown rather than marking the entire account dark.
+                const isBootstrapMethod = method === 'loadCodeAssist' || method === 'onboardUser';
+                const errMsgLower = (error.message || '').toLowerCase();
+                const isStagingApiMissing = errMsgLower.includes('has not been used in project')
+                    && errMsgLower.includes('staging');
+                const isAccountFatal = isBootstrapMethod
+                    || (!isBootstrapMethod && !isStagingApiMissing && (
+                        errMsgLower.includes('has not been used in project')
+                        || errMsgLower.includes('api is not enabled')
+                        || errMsgLower.includes('api has not been used')
+                    ));
+
                 const poolManager = getProviderPoolManager();
                 if (poolManager && this.uuid) {
-                    if (is403) {
-                        // 403 is definitive — token refresh won't help, mark account dark immediately
-                        logger.info(`[Antigravity] Marking credential ${this.uuid} immediately unhealthy. Reason: ${reason}`);
+                    if (is403 && isAccountFatal) {
+                        // True account-level failure — mark account dark.
+                        logger.info(`[Antigravity] Marking credential ${this.uuid} immediately unhealthy (account-fatal 403). Reason: ${reason}`);
                         poolManager.markProviderUnhealthyImmediately(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
                             uuid: this.uuid
                         }, reason);
+                        error.credentialMarkedUnhealthy = true;
+                    } else if (is403) {
+                        // Model-specific 403 — cool down only THIS model on THIS account.
+                        // Staging-API-missing: use 24h cooldown (project won't gain staging access soon).
+                        const modelId = toPoolModelKey(body?.model || body?.request?.model);
+                        const cooldownMs = isStagingApiMissing ? 86400000 : 60000;
+                        if (modelId && typeof poolManager.markModelCooldownForAccount === 'function') {
+                            logger.info(`[Antigravity] Per-account cooldown for ${this.uuid} on model ${modelId} (403, not account-fatal, ${cooldownMs}ms)`);
+                            poolManager.markModelCooldownForAccount(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, this.uuid, modelId, cooldownMs);
+                            error.credentialMarkedUnhealthy = true;
+                        } else {
+                            // No model id resolvable — fall back to needs-refresh (less destructive than immediate-unhealthy).
+                            logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh (403, model unknown)`);
+                            poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, { uuid: this.uuid });
+                            error.credentialMarkedUnhealthy = true;
+                        }
                     } else {
+                        // 401 — token may be stale; refresh is the right action.
                         logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh. Reason: ${reason}`);
                         poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
                             uuid: this.uuid
                         });
+                        error.credentialMarkedUnhealthy = true;
                     }
-                    error.credentialMarkedUnhealthy = true;
                 }
 
                 // Mark error for credential switch without recording error count
@@ -1186,21 +1260,24 @@ export class AntigravityApiService {
                 throw error;
             }
 
+            // Handle 429 — rotate base URLs first (correct for multi-URL accounts), then throw
+            // immediately to trigger pool-manager account rotation. No per-account backoff.
             if (status === 429) {
-                const retryAfter = getRetryAfterMs(error);
-                if (retryAfter !== null) {
-                    logger.warn(`[Antigravity API] Received 429 with Retry-After: ${retryAfter}ms. Throwing to upper layer.`);
-                    throw error;
-                }
                 if (baseURLIndex + 1 < this.baseURLs.length) {
                     logger.info(`[Antigravity API] Rate limited on ${baseURL}. Trying next base URL...`);
                     return this.callApi(method, body, isRetry, retryCount, baseURLIndex + 1);
-                } else if (retryCount < maxRetries) {
-                    const delay = baseDelay * Math.pow(2, retryCount);
-                    logger.info(`[Antigravity API] Received 429 (Too Many Requests). No Retry-After found. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    return this.callApi(method, body, isRetry, retryCount + 1, 0);
                 }
+                // Apply per-account model cooldown for 429 to give this account a break
+                // without taking the whole account offline.
+                const poolManager = getProviderPoolManager();
+                const modelId = toPoolModelKey(body?.model || body?.request?.model);
+                if (poolManager && this.uuid && modelId && typeof poolManager.markModelCooldownForAccount === 'function') {
+                    poolManager.markModelCooldownForAccount(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, this.uuid, modelId, 60000);
+                    error.credentialMarkedUnhealthy = true;
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                }
+                throw error;
             }
 
             // Handle network errors - try next base URL first, then retry with backoff
@@ -1280,21 +1357,44 @@ export class AntigravityApiService {
                 const reason = is403 ? '403 Permission Denied' : '401 Unauthorized';
                 logger.info(`[Antigravity API] Received ${status} during stream. Triggering credential switch via PoolManager...`);
 
+                const isBootstrapMethod = method === 'loadCodeAssist' || method === 'onboardUser';
+                const errMsgLower = (error.message || '').toLowerCase();
+                const isStagingApiMissing = errMsgLower.includes('has not been used in project')
+                    && errMsgLower.includes('staging');
+                const isAccountFatal = isBootstrapMethod
+                    || (!isBootstrapMethod && !isStagingApiMissing && (
+                        errMsgLower.includes('has not been used in project')
+                        || errMsgLower.includes('api is not enabled')
+                        || errMsgLower.includes('api has not been used')
+                    ));
+
                 const poolManager = getProviderPoolManager();
                 if (poolManager && this.uuid) {
-                    if (is403) {
-                        // 403 is definitive — token refresh won't help, mark account dark immediately
-                        logger.info(`[Antigravity] Marking credential ${this.uuid} immediately unhealthy. Reason: ${reason}`);
+                    if (is403 && isAccountFatal) {
+                        logger.info(`[Antigravity] Marking credential ${this.uuid} immediately unhealthy (account-fatal 403). Reason: ${reason}`);
                         poolManager.markProviderUnhealthyImmediately(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
                             uuid: this.uuid
                         }, reason);
+                        error.credentialMarkedUnhealthy = true;
+                    } else if (is403) {
+                        const modelId = toPoolModelKey(body?.model || body?.request?.model);
+                        const cooldownMs = isStagingApiMissing ? 86400000 : 60000;
+                        if (modelId && typeof poolManager.markModelCooldownForAccount === 'function') {
+                            logger.info(`[Antigravity] Per-account stream cooldown for ${this.uuid} on model ${modelId} (403, not account-fatal, ${cooldownMs}ms)`);
+                            poolManager.markModelCooldownForAccount(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, this.uuid, modelId, cooldownMs);
+                            error.credentialMarkedUnhealthy = true;
+                        } else {
+                            logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh (stream 403, model unknown)`);
+                            poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, { uuid: this.uuid });
+                            error.credentialMarkedUnhealthy = true;
+                        }
                     } else {
                         logger.info(`[Antigravity] Marking credential ${this.uuid} as needs refresh. Reason: ${reason}`);
                         poolManager.markProviderNeedRefresh(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, {
                             uuid: this.uuid
                         });
+                        error.credentialMarkedUnhealthy = true;
                     }
-                    error.credentialMarkedUnhealthy = true;
                 }
 
                 // Mark error for credential switch without recording error count
@@ -1303,23 +1403,23 @@ export class AntigravityApiService {
                 throw error;
             }
 
+            // Handle 429 — rotate base URLs first, then throw immediately for account rotation.
             if (status === 429) {
-                const retryAfter = getRetryAfterMs(error);
-                if (retryAfter !== null) {
-                    logger.warn(`[Antigravity API] Received 429 with Retry-After: ${retryAfter}ms during stream. Throwing to upper layer.`);
-                    throw error;
-                }
                 if (baseURLIndex + 1 < this.baseURLs.length) {
                     logger.info(`[Antigravity API] Rate limited on ${baseURL}. Trying next base URL...`);
                     yield* this.streamApi(method, body, isRetry, retryCount, baseURLIndex + 1);
                     return;
-                } else if (retryCount < maxRetries) {
-                    const delay = baseDelay * Math.pow(2, retryCount);
-                    logger.info(`[Antigravity API] Received 429 (Too Many Requests) during stream. No Retry-After found. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    yield* this.streamApi(method, body, isRetry, retryCount + 1, 0);
-                    return;
                 }
+                // Per-account model cooldown for 429 — don't kill the whole account.
+                const poolManager = getProviderPoolManager();
+                const modelId = toPoolModelKey(body?.model || body?.request?.model);
+                if (poolManager && this.uuid && modelId && typeof poolManager.markModelCooldownForAccount === 'function') {
+                    poolManager.markModelCooldownForAccount(this.config.MODEL_PROVIDER || MODEL_PROVIDER.ANTIGRAVITY, this.uuid, modelId, 60000);
+                    error.credentialMarkedUnhealthy = true;
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                }
+                throw error;
             }
 
             // Handle network errors - try next base URL first, then retry with backoff
@@ -1427,7 +1527,6 @@ export class AntigravityApiService {
         // 将处理后的请求体转换为 Antigravity 格式
         const payload = geminiToAntigravity(actualModelName, { request: processedRequestBody }, this.projectId);
 
-        // 设置模型名称为实际模型名
         payload.model = actualModelName;
 
         // 对于 Claude 模型，使用流式请求然后转换为非流式响应
@@ -1505,7 +1604,6 @@ export class AntigravityApiService {
         // 将处理后的请求体转换为 Antigravity 格式
         const payload = geminiToAntigravity(actualModelName, { request: processedRequestBody }, this.projectId);
 
-        // 设置模型名称为实际模型名
         payload.model = actualModelName;
 
         const stream = this.streamApi('streamGenerateContent', payload);

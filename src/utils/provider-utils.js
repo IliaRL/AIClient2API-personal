@@ -29,7 +29,7 @@ export const PROVIDER_MAPPINGS = [
         patterns: ['configs/gemini/', '/gemini/', '/.gemini/', 'configs/gemini-cli/'],
         providerType: 'gemini-cli-oauth',
         credPathKey: 'GEMINI_OAUTH_CREDS_FILE_PATH',
-        defaultCheckModel: 'gemini-2.5-flash',
+        defaultCheckModel: 'gemini-2.5-flash-lite',
         displayName: 'Gemini CLI OAuth',
         needsProjectId: true,
         urlKeys: ['GEMINI_BASE_URL']
@@ -40,7 +40,7 @@ export const PROVIDER_MAPPINGS = [
         patterns: ['configs/qwen/', '/qwen/'],
         providerType: 'openai-qwen-oauth',
         credPathKey: 'QWEN_OAUTH_CREDS_FILE_PATH',
-        defaultCheckModel: 'qwen3-coder-plus',
+        defaultCheckModel: 'qwen3-coder-flash',
         defaultCheckHealth: true,
         displayName: 'Qwen OAuth',
         needsProjectId: false,
@@ -63,7 +63,7 @@ export const PROVIDER_MAPPINGS = [
         patterns: ['configs/iflow/', '/iflow/'],
         providerType: 'openai-iflow',
         credPathKey: 'IFLOW_TOKEN_FILE_PATH',
-        defaultCheckModel: 'gpt-4o',
+        defaultCheckModel: 'qwen3-coder-plus',
         displayName: 'iFlow API',
         needsProjectId: false,
         urlKeys: ['IFLOW_BASE_URL']
@@ -74,7 +74,7 @@ export const PROVIDER_MAPPINGS = [
         patterns: ['configs/codex/', '/codex/', '/.codex/'],
         providerType: 'openai-codex-oauth',
         credPathKey: 'CODEX_OAUTH_CREDS_FILE_PATH',
-        defaultCheckModel: 'gpt-5.2-codex',
+        defaultCheckModel: 'gpt-5.4',
         displayName: 'OpenAI Codex OAuth',
         needsProjectId: false,
         urlKeys: ['CODEX_BASE_URL']

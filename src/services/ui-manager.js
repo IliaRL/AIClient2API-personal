@@ -30,6 +30,14 @@ export async function serveStaticFiles(pathParam, res) {
     // 1. 尝试从系统 static 目录服务
     let filePath = path.join(process.cwd(), 'static', pathParam === '/' || pathParam === '/index.html' ? 'index.html' : pathParam.replace('/static/', ''));
 
+    const staticDir = path.join(process.cwd(), 'static');
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(staticDir + path.sep) && resolvedPath !== staticDir) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('Forbidden');
+        return;
+    }
+
     if (!existsSync(filePath)) {
         // 2. 尝试从插件目录服务
         const pluginManager = getPluginManager();

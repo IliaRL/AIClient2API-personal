@@ -112,19 +112,25 @@ export async function handleStreamRequest(res, service, model, requestBody, from
         const rateLimitRecoveryTime = getRateLimitCooldownRecoveryTime(error, CONFIG);
         const statusCode = getErrorStatusCode(error);
         if (rateLimitRecoveryTime && providerPoolManager && pooluuid) {
-            if (model && typeof providerPoolManager.markModelCooldown === 'function') {
-                providerPoolManager.markModelCooldown(toProvider, pooluuid, model, rateLimitRecoveryTime);
+            if (model && typeof providerPoolManager.markModelCooldownForAccount === 'function') {
+                // Per-account cooldown for 429 — other accounts of the same provider keep serving this model.
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, rateLimitRecoveryTime);
             } else {
                 providerPoolManager.markProviderUnhealthyWithRecoveryTime(toProvider, { uuid: pooluuid }, '429 Too Many Requests', rateLimitRecoveryTime);
             }
         } else if (providerPoolManager && pooluuid) {
+            const errMsg = (error?.message || '').toLowerCase();
+            const isCapacity503 = (statusCode === 503 || statusCode === 502) &&
+                (errMsg.includes('no capacity') || errMsg.includes('model') || errMsg.includes('overloaded'));
             if (statusCode === 400 && error.shouldSwitchCredential && error.skipErrorCount) {
-                // 400 with switch signal = backend rejection for this model.
-                // Apply 5-min cooldown to this model for ALL accounts of this provider.
-                const recoveryTime = new Date(Date.now() + 300000);
-                if (typeof providerPoolManager.markModelCooldownAllAccounts === 'function') {
-                    providerPoolManager.markModelCooldownAllAccounts(toProvider, model, recoveryTime);
+                // 400 with switch signal = backend rejection for this model on this account.
+                // Apply 60s PER-ACCOUNT cooldown — do NOT block other accounts of this provider.
+                if (typeof providerPoolManager.markModelCooldownForAccount === 'function' && model) {
+                    providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
                 }
+            } else if (isCapacity503 && model && typeof providerPoolManager.markModelCooldownForAccount === 'function') {
+                // 503 "No capacity" is transient and model-specific. Per-account cooldown only.
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
             } else if (statusCode !== 400 || (statusCode === 400 && !error.skipErrorCount)) {
                 providerPoolManager.markProviderUnhealthy(toProvider, { uuid: pooluuid }, error.message);
             }
@@ -190,16 +196,24 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         const rateLimitRecoveryTime = getRateLimitCooldownRecoveryTime(error, CONFIG);
         const statusCode = getErrorStatusCode(error);
         if (rateLimitRecoveryTime && providerPoolManager && pooluuid) {
-            if (model && typeof providerPoolManager.markModelCooldown === 'function') providerPoolManager.markModelCooldown(toProvider, pooluuid, model, rateLimitRecoveryTime);
-            else providerPoolManager.markProviderUnhealthyWithRecoveryTime(toProvider, { uuid: pooluuid }, '429 Too Many Requests', rateLimitRecoveryTime);
+            if (model && typeof providerPoolManager.markModelCooldownForAccount === 'function') {
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, rateLimitRecoveryTime);
+            } else {
+                providerPoolManager.markProviderUnhealthyWithRecoveryTime(toProvider, { uuid: pooluuid }, '429 Too Many Requests', rateLimitRecoveryTime);
+            }
         } else if (providerPoolManager && pooluuid) {
+            const errMsg = (error?.message || '').toLowerCase();
+            const isCapacity503 = (statusCode === 503 || statusCode === 502) &&
+                (errMsg.includes('no capacity') || errMsg.includes('model') || errMsg.includes('overloaded'));
             if (statusCode === 400 && error.shouldSwitchCredential && error.skipErrorCount) {
-                // 400 with switch signal = backend rejection for this model.
-                // Apply 5-min cooldown to this model for ALL accounts of this provider.
-                const recoveryTime = new Date(Date.now() + 300000);
-                if (typeof providerPoolManager.markModelCooldownAllAccounts === 'function') {
-                    providerPoolManager.markModelCooldownAllAccounts(toProvider, model, recoveryTime);
+                // 400 with switch signal = backend rejection on this specific account.
+                // Apply 60s PER-ACCOUNT cooldown only — keep other accounts available for this model.
+                if (typeof providerPoolManager.markModelCooldownForAccount === 'function' && model) {
+                    providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
                 }
+            } else if (isCapacity503 && model && typeof providerPoolManager.markModelCooldownForAccount === 'function') {
+                // 503 "No capacity" — transient + model-specific. Cool down only THIS model on THIS account.
+                providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
             } else if (statusCode !== 400 || (statusCode === 400 && !error.skipErrorCount)) {
                 providerPoolManager.markProviderUnhealthy(toProvider, { uuid: pooluuid }, error.message);
             }
@@ -258,35 +272,40 @@ function buildConfiguredModelListResponse(models, providerType, listEndpointType
 }
 
 export async function handleContentGenerationRequest(req, res, service, endpointType, CONFIG, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, requestPath = null) {
-    const originalRequestBody = await getRequestBody(req);
-    if (req.headers['x-force-fallback'] === 'true') {
-        originalRequestBody._forceFallbackTesting = true;
+    let fromProvider;
+    try {
+        const originalRequestBody = await getRequestBody(req);
+        if (req.headers['x-force-fallback'] === 'true') {
+            originalRequestBody._forceFallbackTesting = true;
+        }
+        fromProvider = { [ENDPOINT_TYPE.OPENAI_CHAT]: MODEL_PROTOCOL_PREFIX.OPENAI, [ENDPOINT_TYPE.OPENAI_RESPONSES]: MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, [ENDPOINT_TYPE.CLAUDE_MESSAGE]: MODEL_PROTOCOL_PREFIX.CLAUDE, [ENDPOINT_TYPE.GEMINI_CONTENT]: MODEL_PROTOCOL_PREFIX.GEMINI }[endpointType];
+        let toProvider = CONFIG.actualProviderType || CONFIG.MODEL_PROVIDER;
+        let { model, isStream } = ProviderStrategyFactory.getStrategy(getProtocolPrefix(fromProvider)).extractModelAndStreamInfo(req, originalRequestBody);
+
+        const shouldSelectByPool = providerPoolManager && (CONFIG.MODEL_PROVIDER === MODEL_PROVIDER.AUTO || (CONFIG.providerPools && CONFIG.providerPools[CONFIG.MODEL_PROVIDER]));
+        let isFallback = false;
+        if (!service || shouldSelectByPool) {
+            const { getApiServiceWithFallback } = await import('../services/service-manager.js');
+            const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: shouldSelectByPool });
+            service = result.service;
+            toProvider = result.actualProviderType;
+            model = result.actualModel || model;
+            isFallback = result.isFallback === undefined ? false : result.isFallback;
+        }
+
+        let processedRequestBody = { ...originalRequestBody };
+        if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider)) processedRequestBody = convertData(processedRequestBody, 'request', fromProvider, toProvider);
+
+        const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(toProvider));
+        processedRequestBody = await strategy.applySystemPromptFromFile(CONFIG, processedRequestBody);
+        await strategy.manageSystemPrompt(processedRequestBody);
+
+        const retryContext = { CONFIG, currentRetry: 0, maxRetries: CONFIG.CREDENTIAL_SWITCH_MAX_RETRIES || 5, triedModels: new Set([model]), isFallback };
+        if (isStream) await handleStreamRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, CONFIG.customName, retryContext);
+        else await handleUnaryRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, CONFIG.customName, retryContext);
+    } catch (error) {
+        handleError(res, error, null, fromProvider || MODEL_PROTOCOL_PREFIX.OPENAI, req);
     }
-    const fromProvider = { [ENDPOINT_TYPE.OPENAI_CHAT]: MODEL_PROTOCOL_PREFIX.OPENAI, [ENDPOINT_TYPE.OPENAI_RESPONSES]: MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, [ENDPOINT_TYPE.CLAUDE_MESSAGE]: MODEL_PROTOCOL_PREFIX.CLAUDE, [ENDPOINT_TYPE.GEMINI_CONTENT]: MODEL_PROTOCOL_PREFIX.GEMINI }[endpointType];
-    let toProvider = CONFIG.actualProviderType || CONFIG.MODEL_PROVIDER;
-    let { model, isStream } = ProviderStrategyFactory.getStrategy(getProtocolPrefix(fromProvider)).extractModelAndStreamInfo(req, originalRequestBody);
-
-    const shouldSelectByPool = providerPoolManager && (CONFIG.MODEL_PROVIDER === MODEL_PROVIDER.AUTO || (CONFIG.providerPools && CONFIG.providerPools[CONFIG.MODEL_PROVIDER]));
-    let isFallback = false;
-    if (!service || shouldSelectByPool) {
-        const { getApiServiceWithFallback } = await import('../services/service-manager.js');
-        const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: shouldSelectByPool });
-        service = result.service; 
-        toProvider = result.actualProviderType; 
-        model = result.actualModel || model;
-        isFallback = result.isFallback === undefined ? false : result.isFallback;
-    }
-
-    let processedRequestBody = { ...originalRequestBody };
-    if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider)) processedRequestBody = convertData(processedRequestBody, 'request', fromProvider, toProvider);
-
-    const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(toProvider));
-    processedRequestBody = await strategy.applySystemPromptFromFile(CONFIG, processedRequestBody);
-    await strategy.manageSystemPrompt(processedRequestBody);
-
-    const retryContext = { CONFIG, currentRetry: 0, maxRetries: CONFIG.CREDENTIAL_SWITCH_MAX_RETRIES || 5, triedModels: new Set([model]), isFallback };
-    if (isStream) await handleStreamRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, CONFIG.customName, retryContext);
-    else await handleUnaryRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, CONFIG.customName, retryContext);
 }
 
 export function handleError(res, error, provider = null, fromProvider = null, req = null, metadata = {}) {

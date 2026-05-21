@@ -63,17 +63,18 @@ export const PROVIDER_MODELS = {
     ],
     'claude-custom': [],
     'claude-kiro-oauth': [
-        // Only these three models are verified live on this account. Re-add others only after confirming access.
         'claude-haiku-4-5',
         'claude-sonnet-4-5',
         'claude-sonnet-4-5-20250929',
+        'claude-opus-4-5',
+        'claude-opus-4-6',
+        'claude-opus-4-7',
     ],
     'openai-custom': [],
     'openaiResponses-custom': [],
     'openai-qwen-oauth': [
         'coder-model',
         'vision-model',
-        'qwen3-coder-plus',
         'qwen3-coder-flash',
     ],
     'openai-iflow': [

@@ -9,6 +9,7 @@ import { discoverPlugins, getPluginManager } from '../core/plugin-manager.js';
 import { getTLSSidecar } from '../utils/tls-sidecar.js';
 import { HEALTH_CHECK } from '../utils/constants.js';
 import PreflightHealthMonitor from './preflight-health.js';
+import * as cockpitQuota from '../utils/cockpit-quota.js';
 
 /**
  * @license
@@ -459,6 +460,7 @@ async function startServer() {
             const preflightMonitor = new PreflightHealthMonitor(poolManager);
             setImmediate(() => preflightMonitor.start());
         }
+        setImmediate(() => cockpitQuota.start());
 
         // 定时健康检查
         // 注意：无论初始 enabled 状态如何，都注册 reloadHealthCheckTimer，

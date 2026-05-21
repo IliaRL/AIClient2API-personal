@@ -278,6 +278,11 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     // Cleanup old logs periodically
     logger.cleanupOldLogs();
 
+    // Security: warn if the default API key is still in use
+    if (CONFIG.REQUIRED_API_KEY === '123456') {
+        console.warn('[Security] WARNING: Using default API key "123456". Set AICLIENT_TOKEN env var to a strong secret before exposing this proxy.');
+    }
+
     return CONFIG;
 }
 
