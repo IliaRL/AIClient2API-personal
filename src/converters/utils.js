@@ -73,6 +73,9 @@ export const MODEL_MAX_OUTPUT_TOKENS = {
     'gemini-3-flash': 65535,
     'gemini-3.1-pro-high': 65535,
     'gemini-3.1-pro-low': 65535,
+    'gemini-3.1-flash-image': 65535,
+    'gemini-3-flash-agent': 65535,
+    'gemini-2.5-flash-thinking': 65535,
     // Antigravity Claude-via-Gemini models
     'gemini-claude-sonnet-4-6': 64000,
     'gemini-claude-opus-4-6-thinking': 32000,
@@ -127,6 +130,9 @@ export const MODEL_CONTEXT_WINDOWS = {
     'gemini-3-flash': 1048576,
     'gemini-3.1-pro-high': 1048576,
     'gemini-3.1-pro-low': 1048576,
+    'gemini-3.1-flash-image': 1048576,
+    'gemini-3-flash-agent': 1048576,
+    'gemini-2.5-flash-thinking': 1048576,
     'gemini-claude-sonnet-4-6': 200000,
     'gemini-claude-opus-4-6-thinking': 200000,
     // Kiro / Anthropic Claude models

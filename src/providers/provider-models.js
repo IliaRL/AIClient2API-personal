@@ -53,13 +53,22 @@ export const PROVIDER_MODELS = {
         'gemini-2.5-pro',
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
+        // Upstream merge 2026-05-21: new gemini-3.5-flash variant
+        'gemini-3.5-flash',
     ],
     'gemini-antigravity': [
         'gemini-3-flash',
         'gemini-3.1-pro-high',
         'gemini-3.1-pro-low',
+        // Upstream merge 2026-05-21: new gemini-3.5-flash variants
+        'gemini-3.5-flash-low',
+        'gemini-3.5-flash-high',
         'gemini-claude-sonnet-4-6',
         'gemini-claude-opus-4-6-thinking',
+        // Live-verified 2026-05-21: excluded models confirmed working
+        'gemini-3.1-flash-image',
+        'gemini-3-flash-agent',
+        'gemini-2.5-flash-thinking',
     ],
     'claude-custom': [],
     'claude-kiro-oauth': [
