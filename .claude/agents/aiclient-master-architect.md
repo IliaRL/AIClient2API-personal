@@ -32,16 +32,18 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 ---
 
-## Current Verified Baseline (2026-05-19f)
+## Current Verified Baseline (2026-05-21)
 
-- **36 models across 8 providers** — all verified live (incl. grok-web)
-- **35 pool accounts** (updated this session — 9 additional Antigravity accounts added)
-- **Staging-API fix 2026-05-19e**: 403 "Gemini for Google Cloud API (Staging) has not been used in project" from generateContent now applies 24h per-account model cooldown instead of marking account dead. Accounts that can't serve HIGH thinking can still serve other models.
-- **404 fix 2026-05-19e**: 404 "Requested entity was not found" in request-handlers.js now applies model cooldown instead of marking full account unhealthy.
-- **TTFT fix (this session)**: TTFT timeout now applies 30s per-model cooldown (`markModelCooldownForAccount`) instead of full account blackout. `TTFT_TIMEOUT_OVERRIDES` in config.json allows per-model override (45s for pro-high, 30s for opus).
-- **Horizontal exhaustion guard (this session)**: `_hasAnyHealthyAccountForModel()` helper in `provider-pool-manager.js` prevents fallback thrash when all accounts for a model are in cooldown.
-- **PreflightHealthMonitor (this session)**: `src/services/preflight-health.js` — background 30s polling of model availability, advisory cache. Never affects routing decisions.
-- **429 fix applied 2026-05-19**: Per-account 429 backoff removed from gemini-core.js + antigravity-core.js. Account rotation now immediate. Jitter 500→100ms.
+- **39 models across 7 providers** — all verified live
+- **30 pool accounts** (removed 3 dead Antigravity staging-403 accounts)
+- **Cockpit quota routing (2026-05-20)**: `src/utils/cockpit-quota.js` — singleton polls `http://127.0.0.1:18081/report` every 10 min; injects `(100 - remaining%) × 1e9` penalty into `_calculateNodeScore()` per account+model. File fallback to `~/.antigravity_cockpit/accounts/`. Accounts at 0% quota sink to bottom of sort order; never removed.
+- **Warmup sort optimization (2026-05-20)**: Precomputes `minSeqInPool` and `now` once before the warmup sort loop instead of O(n) re-scan per comparison.
+- **Staging-API fix 2026-05-19e**: 403 "Gemini for Google Cloud API (Staging) has not been used in project" applies 24h per-account model cooldown instead of marking account dead.
+- **404 fix 2026-05-19e**: 404 "Requested entity was not found" in request-handlers.js applies model cooldown instead of full account blackout.
+- **TTFT fix**: Per-model cooldown on timeout; `TTFT_TIMEOUT_OVERRIDES` in config.json (45s for pro-high/opus).
+- **Horizontal exhaustion guard**: `_hasAnyHealthyAccountForModel()` prevents fallback thrash when all accounts for a model are in cooldown.
+- **PreflightHealthMonitor**: `src/services/preflight-health.js` — background 30s model availability polling, advisory cache only.
+- **429 fix**: Per-account 429 backoff removed from gemini-core.js + antigravity-core.js. Account rotation immediate. Jitter 500→100ms.
 - **Port**: 3000 · **Bearer**: `sk-a60f3efdf9b97e63c84ab4a3583f9d1c`
 - **Restart**: `./scripts/safe-restart.sh` ONLY
 - **Memory**: `/Users/ilialiston/AIClient2API/.claude/agent-memory/aiclient-master-architect/`
@@ -50,7 +52,7 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 | Provider | Count | Models |
 |---|---|---|
-| `claude-kiro-oauth` | 3 | claude-haiku-4-5, claude-sonnet-4-5, claude-sonnet-4-5-20250929 |
+| `claude-kiro-oauth` | 6 | claude-haiku-4-5, claude-sonnet-4-5, claude-sonnet-4-5-20250929, claude-opus-4-5, claude-opus-4-6, claude-opus-4-7 |
 | `gemini-antigravity` | 5 | gemini-3-flash, gemini-3.1-pro-high, gemini-3.1-pro-low, gemini-claude-sonnet-4-6, gemini-claude-opus-4-6-thinking |
 | `gemini-cli-oauth` | 6 | gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview |
 | `github-models` | 6 | gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, DeepSeek-R1 |
