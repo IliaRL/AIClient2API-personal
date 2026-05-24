@@ -1031,11 +1031,10 @@ export class AntigravityApiService {
             if (loadResponse.cloudaicompanionProject) {
                 logger.info(`[Antigravity] Discovered existing Project ID: ${loadResponse.cloudaicompanionProject}`);
                 this.projectId = loadResponse.cloudaicompanionProject;
-
-                // 尝试从 allowedTiers 中获取当前 tierId
+                // 尝试从 allowedTiers 中获取当前 tierId，如果存在 paidTier 则优先使用 paidTier.id
                 const defaultTier = loadResponse.allowedTiers?.find(tier => tier.isDefault);
-                this.tierId = defaultTier?.id || 'free-tier';
-
+                const baseTier = defaultTier?.id || 'free-tier';
+                this.tierId = loadResponse.paidTier?.name ? `${loadResponse.paidTier.name}(${baseTier.replace('-tier', '')})` : baseTier;
                 // 获取可用模型
                 // await this.fetchAvailableModels(); // PRUNED: Skip for faster bootstrap, use static list
                 this.availableModels = ANTIGRAVITY_MODELS;
@@ -1044,11 +1043,12 @@ export class AntigravityApiService {
 
             // If no existing project, we need to onboard
             const defaultTier = loadResponse.allowedTiers?.find(tier => tier.isDefault);
-            const tierId = defaultTier?.id || 'free-tier';
+            const baseTier = defaultTier?.id || 'free-tier';
+            const tierId = loadResponse.paidTier?.name ? `${loadResponse.paidTier.name}(${baseTier.replace('-tier', '')})` : baseTier;
             this.tierId = tierId;
 
             const onboardRequest = {
-                tierId: tierId,
+                tierId: baseTier,
                 cloudaicompanionProject: initialProjectId,
                 metadata: clientMetadata,
             };
