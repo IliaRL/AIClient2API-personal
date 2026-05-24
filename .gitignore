@@ -40,3 +40,10 @@ gha-creds-*.json
 
 # Duplicate reference directory (to prevent indexing loops)
 TEST_REF/
+
+# Upstream proxy configs and credentials
+configs/config.json
+oauth_creds.json
+.antigravity/
+configs/gemini/
+configs/antigravity/

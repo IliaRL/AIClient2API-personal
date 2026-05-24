@@ -424,7 +424,11 @@ export class GeminiApiService {
             logger.info('[Gemini Auth] 无法自动打开浏览器，请手动复制上面的链接到浏览器中打开');
         };
 
-        if (this.config) {
+        const disableAutoOpen = process.env.DISABLE_AUTO_OPEN_BROWSER === 'true' || 
+            (this.config && this.config.DISABLE_AUTO_OPEN_BROWSER) || 
+            !process.stdout.isTTY;
+
+        if (this.config && !disableAutoOpen) {
             try {
                 const childProcess = await open(authUrl);
                 if (childProcess) {

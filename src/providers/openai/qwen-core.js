@@ -494,7 +494,11 @@ export class QwenApiService {
                 logger.info('Waiting for authorization to complete...\n');
             };
 
-            if (config) {
+            const disableAutoOpen = process.env.DISABLE_AUTO_OPEN_BROWSER === 'true' || 
+                (config && config.DISABLE_AUTO_OPEN_BROWSER) || 
+                !process.stdout.isTTY;
+
+            if (config && !disableAutoOpen) {
                 try {
                     const childProcess = await open(authUrl);
                     if (childProcess) {
