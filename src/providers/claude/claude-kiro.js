@@ -2107,7 +2107,6 @@ You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer t
         // Estimate input tokens before making the API call
         const inputTokens = this.estimateInputTokens(requestBody);
         
-        const error = new Error('Mock 400 Kiro Error'); error.response = { status: 400 }; throw error;
         const response = await this.callApi('', finalModel, requestBody);
 
         try {

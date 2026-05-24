@@ -263,15 +263,15 @@ docker compose up -d
 
 > **💡 如果脚本运行失败，可以尝试手动安装依赖并启动：**
 > ```bash
-> npm install
+> pnpm install
 > # 默认启动
-> npm start
+> pnpm start
 > # 查看帮助信息
-> npm run help
+> pnpm run help
 > # 查看 API 调用示例
-> npm run example:api
+> pnpm run example:api
 > # 纯后端模式（禁用前端管理界面）
-> npm start -- --no-ui
+> pnpm start -- --no-ui
 > ```
 
 #### 2. 访问控制台

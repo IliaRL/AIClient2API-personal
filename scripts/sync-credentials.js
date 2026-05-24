@@ -3,7 +3,7 @@ import path from 'path';
 import url from 'url';
 
 // Define target path
-const TARGET_PATH = '/Users/ilialiston/Master-C-Code-Config/Credentials.md';
+const TARGET_DIR = '/Users/ilialiston/MASTER-C/Credentials';
 const PROJECT_DIR = '/Users/ilialiston/AIClient2API';
 
 export async function syncCredentials(options = {}) {
@@ -16,7 +16,7 @@ export async function syncCredentials(options = {}) {
         }
     };
 
-    log('info', `Starting credential sync... Target: ${TARGET_PATH} (Dry run: ${dryRun})`);
+    log('info', `Starting credential sync... Target: ${TARGET_DIR} (Dry run: ${dryRun})`);
 
     // Load configs
     const configPath = path.normalize(path.join(PROJECT_DIR, 'configs', 'config.json'));
@@ -126,170 +126,64 @@ export async function syncCredentials(options = {}) {
         }
     }
 
-    // Read existing Credentials.md
-    if (!fs.existsSync(TARGET_PATH)) {
-        throw new Error(`Master Credentials file not found: ${TARGET_PATH}`);
-    }
-
-    const mdContent = fs.readFileSync(TARGET_PATH, 'utf8');
-    const lines = mdContent.split(/\r?\n/);
-
-    const outputLines = [];
-    let currentProvider = null;
-    let currentAccount = null;
-    let inJsonBlock = false;
+    // Write out the new directory structure
     let updateCount = 0;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        // Parse headings to track context
-        if (line.startsWith('### ')) {
-            const providerName = line.substring(4).trim().toLowerCase();
-            if (['claude-kiro-oauth', 'openai-codex-oauth', 'gemini-cli-oauth', 'gemini-antigravity'].includes(providerName)) {
-                currentProvider = providerName;
-                currentAccount = null;
-                log('debug', `Entered provider context: ${currentProvider}`);
-            } else {
-                currentProvider = null;
-                currentAccount = null;
-            }
-            outputLines.push(line);
-            continue;
+    const writeFileIfChanged = (filePath, newContent) => {
+        let oldContent = '';
+        if (fs.existsSync(filePath)) {
+            oldContent = fs.readFileSync(filePath, 'utf8');
         }
-
-        if (line.startsWith('#### ')) {
-            if (currentProvider) {
-                currentAccount = line.substring(5).trim();
-                log('debug', `Entered account context: ${currentAccount} under ${currentProvider}`);
+        if (oldContent !== newContent) {
+            if (!dryRun) {
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+                fs.writeFileSync(filePath, newContent, 'utf8');
             }
-            outputLines.push(line);
-            continue;
+            updateCount++;
+            log('info', `Synced ${filePath}`);
         }
+    };
 
-        // Detect JSON Code block
-        if (currentProvider && currentAccount && line.trim() === '```json') {
-            inJsonBlock = true;
-            // Fetch the updated credentials
-            let newPayload = null;
+    // 1. System Master Keys
+    if (requiredApiKey) {
+        writeFileIfChanged(path.join(TARGET_DIR, 'System', 'REQUIRED_API_KEY.txt'), requiredApiKey);
+    }
 
-            if (currentProvider === 'claude-kiro-oauth') {
-                if (currentAccount.toLowerCase() === 'account-3') {
-                    newPayload = resolvedOAuth['claude-kiro-oauth'][0]?.data;
-                } else if (currentAccount.toLowerCase() === 'account 2') {
-                    newPayload = resolvedOAuth['claude-kiro-oauth'][1]?.data;
-                } else if (currentAccount.toLowerCase() === 'account 3') {
-                    newPayload = resolvedOAuth['claude-kiro-oauth'][2]?.data;
-                }
-            } else if (currentProvider === 'openai-codex-oauth') {
-                if (currentAccount.toLowerCase() === 'account 1') {
-                    newPayload = resolvedOAuth['openai-codex-oauth'][0]?.data;
-                }
-            } else if (currentProvider === 'gemini-cli-oauth') {
-                const match = currentAccount.match(/Account\s+(\d+)/i);
-                if (match) {
-                    const index = parseInt(match[1]) - 1;
-                    newPayload = resolvedOAuth['gemini-cli-oauth'][index]?.data;
-                }
-            } else if (currentProvider === 'gemini-antigravity') {
-                const targetEmail = currentAccount.trim().toLowerCase();
-                const matchedNode = resolvedOAuth['gemini-antigravity'].find(
-                    node => node.customName && node.customName.trim().toLowerCase() === targetEmail
-                );
-                newPayload = matchedNode?.data;
-            }
+    // 2. Simple API Keys
+    if (nvidiaKey) {
+        writeFileIfChanged(path.join(TARGET_DIR, 'nvidia-nim', 'NVIDIA_NIM_API_Key.txt'), nvidiaKey);
+    }
+    if (githubKey) {
+        writeFileIfChanged(path.join(TARGET_DIR, 'github-models', 'GitHub_PAT_API_Key.txt'), githubKey);
+    }
+    if (openrouterKey) {
+        writeFileIfChanged(path.join(TARGET_DIR, 'openai-custom', 'Open_router_API_Key.txt'), openrouterKey);
+    }
 
-            // Read and collect old JSON payload lines to compare and check if it changed
-            const oldPayloadLines = [];
-            let j = i + 1;
-            while (j < lines.length && lines[j].trim() !== '```') {
-                oldPayloadLines.push(lines[j]);
-                j++;
-            }
-            const oldPayloadStr = oldPayloadLines.join('\n').trim();
-
-            if (newPayload) {
-                const newPayloadStr = JSON.stringify(newPayload, null, 2);
-                const hasChanged = oldPayloadStr !== newPayloadStr.trim();
-
-                outputLines.push('```json');
-                outputLines.push(newPayloadStr);
-                outputLines.push('```');
-
-                if (hasChanged) {
-                    updateCount++;
-                    log('info', `Synced JSON block (updated) for ${currentProvider} -> ${currentAccount}`);
-                } else {
-                    log('debug', `JSON block unchanged for ${currentProvider} -> ${currentAccount}`);
-                }
-            } else {
-                log('warn', `No refreshed payload found for ${currentProvider} -> ${currentAccount}, preserving existing.`);
-                outputLines.push(line);
-                // Copy the existing block
-                i++;
-                while (i < lines.length && lines[i].trim() !== '```') {
-                    outputLines.push(lines[i]);
-                    i++;
-                }
-                if (i < lines.length) {
-                    outputLines.push(lines[i]);
-                }
-            }
-
-            // Fast-forward outer loop index `i` to the end of this block
-            i = j;
-            inJsonBlock = false;
-            continue;
-        }
-
-        // Handle inline API Key replacements when not in code blocks
-        if (!inJsonBlock) {
-            let replacedLine = line;
-
-            if (line.includes('REQUIRED_API_KEY') && requiredApiKey) {
-                replacedLine = line.replace(/`([^`]+)`/, `\`${requiredApiKey}\``);
-                if (replacedLine !== line) {
-                    updateCount++;
-                    log('info', `Synced REQUIRED_API_KEY`);
-                }
-            } else if (line.includes('NVIDIA_NIM API Key') && nvidiaKey) {
-                replacedLine = line.replace(/`([^`]+)`/, `\`${nvidiaKey}\``);
-                if (replacedLine !== line) {
-                    updateCount++;
-                    log('info', `Synced NVIDIA_NIM API Key`);
-                }
-            } else if (line.includes('GitHub PAT API Key') && githubKey) {
-                replacedLine = line.replace(/`([^`]+)`/, `\`${githubKey}\``);
-                if (replacedLine !== line) {
-                    updateCount++;
-                    log('info', `Synced GitHub PAT API Key`);
-                }
-            } else if (line.includes('Open-router API Key') && openrouterKey) {
-                replacedLine = line.replace(/`([^`]+)`/, `\`${openrouterKey}\``);
-                if (replacedLine !== line) {
-                    updateCount++;
-                    log('info', `Synced Open-router API Key`);
-                }
-            }
-
-            outputLines.push(replacedLine);
-        } else {
-            outputLines.push(line);
+    // 3. OAuth JSONs
+    for (const [providerName, accounts] of Object.entries(resolvedOAuth)) {
+        for (let idx = 0; idx < accounts.length; idx++) {
+            const acc = accounts[idx];
+            // Format custom name for filename
+            let safeName = acc.customName ? acc.customName.replace(/[^a-zA-Z0-9@.\-_]/g, '_') : `account_${idx + 1}`;
+            const filePath = path.join(TARGET_DIR, providerName, `${safeName}.json`);
+            const content = JSON.stringify(acc.data, null, 2);
+            writeFileIfChanged(filePath, content);
         }
     }
 
     if (updateCount === 0) {
-        log('info', 'No credentials changed; Master Credentials file is already up to date.');
+        log('info', 'No credentials changed; Master Credentials directory is already up to date.');
         return false;
     }
 
-    const newMdContent = outputLines.join('\n');
-
     if (!dryRun) {
-        fs.writeFileSync(TARGET_PATH, newMdContent, 'utf8');
-        log('info', `Successfully synced ${updateCount} credential(s) to ${TARGET_PATH}`);
+        log('info', `Successfully synced ${updateCount} credential(s) to ${TARGET_DIR}`);
     } else {
-        log('info', `[DRY-RUN] Would have written ${updateCount} updated credential(s) to ${TARGET_PATH}`);
+        log('info', `[DRY-RUN] Would have written ${updateCount} updated credential(s) to ${TARGET_DIR}`);
     }
 
     return true;

@@ -7,9 +7,9 @@ export const HELP_DATA = {
     project: "AIClient2API",
     description: "高性能 AI 模型接口聚合代理服务",
     usage: [
-        { mode: "Master (Default)", cmd: "npm start", desc: "多进程模式，支持子进程监控与自动重启" },
-        { mode: "Standalone", cmd: "npm run start:standalone", desc: "单进程模式，直接运行 API 服务" },
-        { mode: "Dev", cmd: "npm run start:dev", desc: "开发调试模式，开启详细日志" }
+        { mode: "Master (Default)", cmd: "pnpm start", desc: "多进程模式，支持子进程监控与自动重启" },
+        { mode: "Standalone", cmd: "pnpm run start:standalone", desc: "单进程模式，直接运行 API 服务" },
+        { mode: "Dev", cmd: "pnpm run start:dev", desc: "开发调试模式，开启详细日志" }
     ],
     scripts: [
         { os: "Linux/macOS", file: "./install-and-run.sh", desc: "自动安装依赖并启动" },

@@ -31,9 +31,9 @@ Homebrew is a package manager for macOS that simplifies the installation of othe
 
 Follow the on-screen instructions to complete the installation, including adding Homebrew to your PATH.
 
-### 1.2 Install Node.js and npm
+### 1.2 Install Node.js and pnpm
 
-AIClient2API is a Node.js application, so you'll need Node.js and its package manager, npm.
+AIClient2API is a Node.js application, so you'll need Node.js and the package manager pnpm.
 
 ```bash
 brew install node
@@ -42,7 +42,7 @@ brew install node
 Verify the installation:
 ```bash
 node -v
-npm -v
+pnpm -v
 ```
 
 ### 1.3 Install Git
@@ -82,21 +82,21 @@ cd AIClient-2-API
 ### 2.3 Install Project Dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 2.4 Configure Admin Password (Optional but Recommended for Management APIs)
 
 The `AIClient2API` uses a hashed password for its management APIs (e.g., `/api/*`). If you plan to use these, you'll need to set an admin password. The hashed password is stored in `configs/pwd`.
 
-**Note:** The agent discovered that `configs/pwd` contains a PBKDF2 hash (`pbkdf2:salt:hash`). To set or change this, you typically need to use a utility provided by AIClient2API or manually generate a hash. For a new setup, it's often generated upon first configuration or login attempt if not present. Refer to AIClient2API's specific documentation or `npm run help` for details on how to set the admin password securely.
+**Note:** The agent discovered that `configs/pwd` contains a PBKDF2 hash (`pbkdf2:salt:hash`). To set or change this, you typically need to use a utility provided by AIClient2API or manually generate a hash. For a new setup, it's often generated upon first configuration or login attempt if not present. Refer to AIClient2API's specific documentation or `pnpm run help` for details on how to set the admin password securely.
 
 ### 2.5 Start the AIClient2API Proxy
 
 To start the proxy service:
 
 ```bash
-npm start
+pnpm start
 ```
 
 The proxy should now be running, typically on `http://localhost:3000`. You can verify its status by navigating to `http://localhost:3000/provider_health` in your web browser (no authentication required).
@@ -350,8 +350,8 @@ Replace `<any_configured_model>` with a model listed by `/v1/models`.
 ### 6.4 Common Troubleshooting
 
 *   **`401 Unauthorized`**: Check your `ANTHROPIC_API_KEY` in `settings.local.json` and ensure it matches what your AIClient2API expects for inference calls. For management APIs, ensure you've logged in via `/api/login` and are using the dynamic token.
-*   **`502/503 Proxy can't reach provider`**: Check the logs of your AIClient2API proxy (`npm start` output) for errors connecting to the upstream AI providers. Verify your API keys for the individual providers are correct and have quota.
-*   **`ECONNREFUSED`**: The AIClient2API proxy is likely not running. Ensure you've executed `npm start` in the `AIClient-2-API` directory.
+*   **`502/503 Proxy can't reach provider`**: Check the logs of your AIClient2API proxy (`pnpm start` output) for errors connecting to the upstream AI providers. Verify your API keys for the individual providers are correct and have quota.
+*   **`ECONNREFUSED`**: The AIClient2API proxy is likely not running. Ensure you've executed `pnpm start` in the `AIClient-2-API` directory.
 *   **Model not found/incorrect routing**: Review your `globalConfig` for `fallbackChain` and `modelFallbackMapping`. Check `src/providers/provider-models.js` to ensure your models are correctly defined.
 *   **Provider not listed in `/provider_health`**: Ensure your provider credential files are correctly placed in the `configs/` directory and have the right format.
 

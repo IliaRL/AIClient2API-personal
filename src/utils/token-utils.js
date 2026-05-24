@@ -15,7 +15,7 @@ try {
     nativeTokenizer = require(nativePath);
     logger.info('[TokenUtils] Native Rust tokenizer loaded successfully');
 } catch (error) {
-    logger.warn('[TokenUtils] Native tokenizer not found, using JS fallback. Run "npm run build:native" to enable high-performance tokenization.');
+    logger.warn('[TokenUtils] Native tokenizer not found, using JS fallback. Run "pnpm run build:native" to enable high-performance tokenization.');
 }
 
 /**

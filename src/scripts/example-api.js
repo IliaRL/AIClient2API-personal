@@ -10,6 +10,6 @@ if (isJson) {
     }, null, 2));
 } else {
     console.log(formatApiGuideText());
-    console.log('\n\x1b[33m提示: 运行 npm run example:api -- --json 可获取结构化数据。\x1b[0m\n');
+    console.log('\n\x1b[33m提示: 运行 pnpm run example:api -- --json 可获取结构化数据。\x1b[0m\n');
 }
 

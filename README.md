@@ -264,15 +264,15 @@ To build from source instead of using the pre-built image, edit `docker-compose.
 
 > **💡 Manual installation and startup (supports custom parameters):**
 > ```bash
-> npm install
+> pnpm install
 > # Default startup
-> npm start
+> pnpm start
 > # Show help information
-> npm run help
+> pnpm run help
 > # Show API calling examples
-> npm run example:api
+> pnpm run example:api
 > # Backend-only mode (disable frontend management UI)
-> npm start -- --no-ui
+> pnpm start -- --no-ui
 > ```
 
 #### 2. Access the console

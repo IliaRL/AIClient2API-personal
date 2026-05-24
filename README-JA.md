@@ -264,15 +264,15 @@ docker compose up -d
 
 > **💡 手動インストールと起動（カスタムパラメータ対応）：**
 > ```bash
-> npm install
+> pnpm install
 > # デフォルト起動
-> npm start
+> pnpm start
 > # ヘルプ情報を表示
-> npm run help
+> pnpm run help
 > # API 呼び出しの例を表示
-> npm run example:api
+> pnpm run example:api
 > # バックエンドのみモード（フロントエンド管理画面と）
-> npm start -- --no-ui
+> pnpm start -- --no-ui
 > ```
 
 #### 2. コンソールへのアクセス
