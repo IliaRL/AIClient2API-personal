@@ -21,13 +21,19 @@ class Logger {
         };
         this.currentLogFile = null;
         this.logStream = null;
-        this.asyncStorage = new AsyncLocalStorage(); // 使用 AsyncLocalStorage 存储请求上下文
+        this.asyncStorage = new AsyncLocalStorage();
         this.levels = {
             debug: 0,
             info: 1,
             warn: 2,
             error: 3
         };
+        // Throttle fs.statSync rotation check: only run every 100 writes
+        this._writeCount = 0;
+        this._rotateCheckInterval = 100;
+        // SSE broadcast batching: flush accumulated log lines every 50ms
+        this._sseBatch = [];
+        this._sseFlushTimer = null;
     }
 
 
@@ -198,8 +204,8 @@ class Logger {
      */
     shouldLog(level) {
         if (!this.config.enabled) return false;
-        const currentLevel = this.levels[this.config.logLevel] ?? 1;
-        const targetLevel = this.levels[level] ?? 1;
+        const currentLevel = Object.hasOwn(this.levels, this.config.logLevel) ? this.levels[this.config.logLevel] : 1;
+        const targetLevel = Object.hasOwn(this.levels, level) ? this.levels[level] : 1;
         return targetLevel >= currentLevel;
     }
 
@@ -207,6 +213,10 @@ class Logger {
      * 检查并轮转日志文件
      */
     checkAndRotateLogFile() {
+        // Only stat the file every N writes to avoid blocking I/O on every log line
+        this._writeCount = (this._writeCount || 0) + 1;
+        if (this._writeCount % this._rotateCheckInterval !== 0) return;
+
         try {
             if (!this.currentLogFile || !fs.existsSync(this.currentLogFile)) {
                 return;

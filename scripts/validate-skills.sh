@@ -33,8 +33,6 @@ check "health" "gemini-antigravity defaultCheckModel = gemini-3-flash" \
   "grep -A2 'gemini-antigravity' '$SRC/utils/provider-utils.js' | grep -q 'gemini-3-flash'"
 check "health" "nvidia-nim defaultCheckModel = meta/llama-3.3-70b-instruct" \
   "grep -A2 'nvidia-nim' '$SRC/utils/provider-utils.js' | grep -q 'llama-3.3-70b'"
-check "health" "getDb in db.js (SQLite persistence)" \
-  "grep -q 'export function getDb\|export const getDb' '$SRC/utils/db.js'"
 
 # ── aiclient-models ──────────────────────────────────────────────────────────
 echo ""
@@ -61,20 +59,20 @@ check "routing" "normalizeConfiguredProviders in config-manager.js:12" \
   "grep -n 'normalizeConfiguredProviders' '$SRC/core/config-manager.js' | head -1 | grep -q '12:'"
 check "routing" "handleAPIRequests in api-manager.js:32" \
   "grep -n 'handleAPIRequests' '$SRC/services/api-manager.js' | head -1 | grep -q '32:'"
-check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:549" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '549:'"
+check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:552" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '552:'"
 check "routing" "handleModelListRequest in request-handlers.js (model aggregation)" \
   "grep -q 'handleModelListRequest' '$SRC/utils/request-handlers.js'"
 
 # ── aiclient-statusline ───────────────────────────────────────────────────────
 echo ""
 echo "[ aiclient-statusline ]"
-check "statusline" "updateLastModelFile writes /tmp/aiclient_last_model at request-handlers.js:305" \
-  "grep -n 'aiclient_last_model' '$SRC/utils/request-handlers.js' | head -1 | grep -q '305:'"
-check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:549" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '549:'"
-check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:858" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '858:'"
+check "statusline" "updateLastModelFile renames to /tmp/aiclient_last_model at request-handlers.js:308" \
+  "grep -n \"fs.rename.*aiclient_last_model'\" '$SRC/utils/request-handlers.js' | head -1 | grep -q '308:'"
+check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:552" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '552:'"
+check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:861" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '861:'"
 
 # ── aiclient-debug ────────────────────────────────────────────────────────────
 echo ""
@@ -103,22 +101,18 @@ echo ""
 echo "[ aiclient-preflight ]"
 check "preflight" "registerAdapter calls in adapter.js:704+" \
   "grep -n 'registerAdapter' '$SRC/providers/adapter.js' | sed -n '2p' | grep -q '704:'"
-check "preflight" "getServiceAdapter in adapter.js:756" \
-  "grep -n 'getServiceAdapter' '$SRC/providers/adapter.js' | head -1 | grep -q '756:'"
+check "preflight" "getServiceAdapter in adapter.js:771" \
+  "grep -n 'getServiceAdapter' '$SRC/providers/adapter.js' | head -1 | grep -q '771:'"
 check "preflight" "registerAllConverters in register-converters.js" \
   "grep -q 'registerAllConverters' '$SRC/converters/register-converters.js'"
 check "preflight" "flattenToolArguments exported from converters/utils.js" \
   "grep -q 'export.*flattenToolArguments\|flattenToolArguments.*export' '$SRC/converters/utils.js'"
-check "preflight" "WAL pragma present in db.js" \
-  "grep -q 'WAL\|wal_mode\|journal_mode' '$SRC/utils/db.js'"
 check "preflight" "request-handlers.js exists (🟡 High risk)" \
   "test -f '$SRC/utils/request-handlers.js'"
 check "preflight" "error-handling.js exists (🟡 High risk)" \
   "test -f '$SRC/utils/error-handling.js'"
 check "preflight" "cooldown-manager.js exists (🟡 High risk)" \
   "test -f '$SRC/providers/cooldown-manager.js'"
-check "preflight" "persistence-manager.js exists (🟡 High risk)" \
-  "test -f '$SRC/providers/persistence-manager.js'"
 check "preflight" "common.js is a barrel (≤15 lines)" \
   "[ \$(wc -l < '$SRC/utils/common.js') -le 15 ]"
 
@@ -129,8 +123,8 @@ check "providers" "registerAdapter calls in adapter.js:704+" \
   "grep -n 'registerAdapter' '$SRC/providers/adapter.js' | sed -n '2p' | grep -q '704:'"
 check "providers" "refreshToken check in provider-pool-manager.js:491" \
   "grep -n 'refreshToken' '$SRC/providers/provider-pool-manager.js' | awk -F: '{if(\$1>=480 && \$1<=505) found=1} END{exit !found}'"
-check "providers" "DEFAULT_HEALTH_CHECK_MODELS in provider-pool-manager.js:52" \
-  "grep -n 'DEFAULT_HEALTH_CHECK_MODELS' '$SRC/providers/provider-pool-manager.js' | head -1 | grep -q '52:'"
+check "providers" "DEFAULT_HEALTH_CHECK_MODELS in provider-pool-manager.js:51" \
+  "grep -n 'DEFAULT_HEALTH_CHECK_MODELS' '$SRC/providers/provider-pool-manager.js' | head -1 | grep -q '51:'"
 check "providers" "PROVIDER_MAPPINGS in provider-utils.js:14" \
   "grep -n 'PROVIDER_MAPPINGS' '$SRC/utils/provider-utils.js' | head -1 | grep -q '14:'"
 check "providers" "normalizeConfiguredProviders in config-manager.js:12" \
@@ -156,8 +150,6 @@ check "modular" "error-handling.js exists" \
   "test -f '$SRC/utils/error-handling.js'"
 check "modular" "cooldown-manager.js exists" \
   "test -f '$SRC/providers/cooldown-manager.js'"
-check "modular" "persistence-manager.js exists" \
-  "test -f '$SRC/providers/persistence-manager.js'"
 check "modular" "request-handlers.js exists" \
   "test -f '$SRC/utils/request-handlers.js'"
 check "modular" "network-utils.js exists" \
@@ -172,10 +164,6 @@ check "modular" "cooldown-manager.js exports CooldownManager class" \
   "grep -q 'export class CooldownManager' '$SRC/providers/cooldown-manager.js'"
 check "modular" "cooldown-manager.js contains cooldown logic" \
   "grep -qi 'cooldown' '$SRC/providers/cooldown-manager.js'"
-check "modular" "persistence-manager.js imports from db.js (SQLite)" \
-  "grep -q 'getDb\|db\.js' '$SRC/providers/persistence-manager.js'"
-check "modular" "persistence-manager.js exports initDb" \
-  "grep -q 'export function initDb' '$SRC/providers/persistence-manager.js'"
 check "modular" "network-utils.js exports sharedHttpAgent" \
   "grep -q 'export.*sharedHttpAgent' '$SRC/utils/network-utils.js'"
 check "modular" "network-utils.js exports isRetryableNetworkError" \
@@ -188,6 +176,20 @@ check "modular" "cockpit-quota imported in provider-pool-manager.js" \
   "grep -q 'cockpit-quota' '$SRC/providers/provider-pool-manager.js'"
 check "modular" "cockpitQuota.start() called in api-server.js" \
   "grep -q 'cockpitQuota.start' '$SRC/services/api-server.js'"
+
+# ── New provider coverage (aiclient-models, aiclient-routing, aiclient-tooluse) ──
+echo ""
+echo "[ new-provider-coverage ]"
+check "aiclient-models" "openai-iflow documented in aiclient-models/SKILL.md" \
+  "grep -q 'openai-iflow' '/Users/ilialiston/AIClient2API/.claude/skills/aiclient-models/SKILL.md'"
+check "aiclient-models" "openai-qwen-oauth documented in aiclient-models/SKILL.md" \
+  "grep -q 'openai-qwen-oauth' '/Users/ilialiston/AIClient2API/.claude/skills/aiclient-models/SKILL.md'"
+check "aiclient-routing" "grok-web fallback present in aiclient-routing/SKILL.md" \
+  "grep -q 'grok-web' '/Users/ilialiston/AIClient2API/.claude/skills/aiclient-routing/SKILL.md'"
+check "aiclient-tooluse" "GrokConverter documented in aiclient-tooluse/SKILL.md" \
+  "grep -q 'GrokConverter' '/Users/ilialiston/AIClient2API/.claude/skills/aiclient-tooluse/SKILL.md'"
+check "aiclient-tooluse" "CodexConverter documented in aiclient-tooluse/SKILL.md" \
+  "grep -q 'CodexConverter' '/Users/ilialiston/AIClient2API/.claude/skills/aiclient-tooluse/SKILL.md'"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

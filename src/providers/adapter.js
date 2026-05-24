@@ -732,6 +732,21 @@ export function invalidateServiceAdapter(provider, uuid = null) {
     return false;
 }
 
+// Removes all cached adapters for a provider type (e.g. after pool hot-reload removes accounts).
+export function invalidateServiceAdaptersByProvider(providerType) {
+    let removed = 0;
+    for (const key of Object.keys(serviceInstances)) {
+        if (key === providerType || key.startsWith(providerType)) {
+            delete serviceInstances[key];
+            removed++;
+        }
+    }
+    if (removed > 0) {
+        logger.info(`[Adapter] Invalidated ${removed} cached adapter(s) for provider type: ${providerType}`);
+    }
+    return removed;
+}
+
 /**
  * 检查提供商是否已注册（支持前缀匹配）
  * @param {string} provider - 提供商名称

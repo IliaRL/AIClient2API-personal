@@ -1,0 +1,991 @@
+
+> aiclient2api@3.0.0 start
+> node src/core/master.js
+
+[Security Hardening] Active: Plugin file write constraints and command execution ban are successfully configured.
+[2026-05-24 05:15:23.129] [INFO] ==================================================
+[2026-05-24 05:15:23.130] [INFO] [Master] AIClient2API Master Process
+[2026-05-24 05:15:23.130] [INFO] [Master] PID: 16641
+[2026-05-24 05:15:23.130] [INFO] [Master] Node version: v20.19.6
+[2026-05-24 05:15:23.130] [INFO] [Master] Working directory: /Users/ilialiston/AIClient2API
+[2026-05-24 05:15:23.130] [INFO] ==================================================
+[2026-05-24 05:15:23.132] [INFO] [Master] Starting worker process...
+[2026-05-24 05:15:23.132] [INFO] [Master] Worker script: /Users/ilialiston/AIClient2API/src/services/api-server.js
+[2026-05-24 05:15:23.132] [INFO] [Master] Worker args: 
+[2026-05-24 05:15:23.135] [INFO] [Master] Worker process started, PID: 16642
+[2026-05-24 05:15:23.136] [INFO] [Master] Management server listening on port 3100
+[2026-05-24 05:15:23.136] [INFO] [Master] Available endpoints:
+[2026-05-24 05:15:23.136] [INFO]   GET  /master/status  - Get master and worker status
+[2026-05-24 05:15:23.136] [INFO]   GET  /master/health  - Health check
+[2026-05-24 05:15:23.136] [INFO]   POST /master/restart - Restart worker process
+[2026-05-24 05:15:23.136] [INFO]   POST /master/stop    - Stop worker process
+[2026-05-24 05:15:23.136] [INFO]   POST /master/start   - Start worker process
+[Security Hardening] Active: Plugin file write constraints and command execution ban are successfully configured.
+[2026-05-24 05:15:23.596] [INFO] [TokenUtils] Native Rust tokenizer loaded successfully
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: openai-custom
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: openaiResponses-custom
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: claude-custom
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: gemini-cli-oauth
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: gemini-antigravity
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: claude-kiro-oauth
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: openai-codex-oauth
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: grok-web
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: nvidia-nim
+[2026-05-24 05:15:23.603] [INFO] [Adapter] Registering adapter for provider: github-models
+[2026-05-24 05:15:23.608] [INFO] [Config] Loaded configuration from configs/config.json
+[2026-05-24 05:15:23.609] [INFO] [System Prompt] Loaded system prompt from /Users/ilialiston/AIClient2API/configs/input_system_prompt.txt
+[2026-05-24 05:15:23.610] [INFO] [Config] Loaded provider pools from configs/provider_pools.json
+[2026-05-24 05:15:23.610] [INFO] [Config] Loaded custom models from configs/custom_models.json
+[2026-05-24 05:15:23.611] [ERROR] [TLS-Sidecar] Binary not found. Build it with: cd tls-sidecar && go build -o tls-sidecar
+[2026-05-24 05:15:23.612] [WARN] [Initialization] TLS sidecar failed to start, falling back to Node.js TLS
+[2026-05-24 05:15:23.612] [INFO] [Initialization] Discovering and initializing plugins...
+[2026-05-24 05:15:23.613] [INFO] [PluginManager] Found plugin for default config: ai-monitor in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:23.617] [INFO] [PluginManager] Found plugin for default config: api-potluck in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:23.618] [INFO] [PluginManager] Found plugin for default config: default-auth in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:23.621] [INFO] [PluginManager] Found plugin for default config: model-usage-stats in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:24.003] [INFO] [PluginManager] Registered plugin: ai-monitor v1.0.0
+[2026-05-24 05:15:24.005] [INFO] [PluginManager] Registered plugin: api-potluck v1.0.2
+[2026-05-24 05:15:24.005] [INFO] [PluginManager] Registered plugin: default-auth v1.0.0
+[2026-05-24 05:15:24.005] [INFO] [PluginManager] Registered plugin: model-usage-stats v1.0.0
+[2026-05-24 05:15:24.006] [INFO] [PluginManager] Found plugin for default config: ai-monitor in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:24.006] [INFO] [PluginManager] Found plugin for default config: api-potluck in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:24.006] [INFO] [PluginManager] Found plugin for default config: default-auth in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:24.006] [INFO] [PluginManager] Found plugin for default config: model-usage-stats in /Users/ilialiston/AIClient2API/src/plugins
+[2026-05-24 05:15:24.094] [INFO] [AI Monitor Plugin] Initialized
+[2026-05-24 05:15:24.094] [INFO] [PluginManager] Initialized plugin: ai-monitor
+[2026-05-24 05:15:24.095] [INFO] [API Potluck Plugin] Initializing...
+[2026-05-24 05:15:24.095] [INFO] [PluginManager] Initialized plugin: api-potluck
+[2026-05-24 05:15:24.095] [INFO] [Model Usage Stats] Initialized
+[2026-05-24 05:15:24.095] [INFO] [PluginManager] Initialized plugin: model-usage-stats
+[2026-05-24 05:15:24.095] [INFO] [Plugins] Loaded 4 plugin(s):
+[2026-05-24 05:15:24.095] [INFO]   ✓ ai-monitor v1.0.0 - AI 接口监控插件 - 捕获请求和响应参数（全链路协议转换监控，流式聚合输出，用于调试和分析）
+[2026-05-24 05:15:24.095] [INFO]   ✓ api-potluck v1.0.2 - API 大锅饭 - Key 管理和用量统计插件<br>管理端：<a href="potluck.html" target="_blank">potluck.html</a><br>用户端：<a href="potluck-user.html" target="_blank">potluck-user.html</a>
+[2026-05-24 05:15:24.095] [INFO]   ✓ default-auth v1.0.0 - 默认 API Key 认证插件
+[2026-05-24 05:15:24.095] [INFO]   ✓ model-usage-stats v1.0.0 - 模型用量统计插件<br>接口：<code>/api/model-usage-stats</code><br>页面：<a href="model-usage-stats.html" target="_blank">model-usage-stats.html</a>
+[2026-05-24 05:15:24.097] [INFO] [ProviderPoolManager] Initialized provider statuses: ok (maxErrorCount: 10)
+[2026-05-24 05:15:24.097] [INFO] [Initialization] ProviderPoolManager initialized.
+[2026-05-24 05:15:24.097] [INFO] [ProviderPoolManager] Starting system warmup (Group Target: 3 nodes per provider)...
+[2026-05-24 05:15:24.098] [INFO] [ProviderPoolManager] Warmup: Selected total 13 nodes across all providers to refresh.
+[2026-05-24 05:15:24.098] [INFO] [ProviderPoolManager] Provider claude-kiro-oauth has only 3 healthy nodes. Bypassing buffer and enqueuing refresh for 111272c7 immediately.
+[2026-05-24 05:15:24.098] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: 111272c7-08b8-4d88-bf8b-7b599a7dfeb5
+[2026-05-24 05:15:24.098] [INFO] [Kiro] System proxy disabled
+[2026-05-24 05:15:24.098] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.098] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/1779315412739_kiro-auth-token
+[2026-05-24 05:15:24.099] [INFO] [ProviderPoolManager] Provider claude-kiro-oauth has only 3 healthy nodes. Bypassing buffer and enqueuing refresh for b804fb89 immediately.
+[2026-05-24 05:15:24.099] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: b804fb89-65db-424c-9e19-6b2c5850364c
+[2026-05-24 05:15:24.100] [INFO] [Kiro] System proxy disabled
+[2026-05-24 05:15:24.100] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.100] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/1779314901592_kiro-auth-token
+[2026-05-24 05:15:24.100] [INFO] [ProviderPoolManager] Provider claude-kiro-oauth has only 3 healthy nodes. Bypassing buffer and enqueuing refresh for account-3 immediately.
+[2026-05-24 05:15:24.100] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: a7afc6cb-9a2e-4596-96cc-06248c5c12a8 (account-3)
+[2026-05-24 05:15:24.100] [INFO] [Kiro] System proxy disabled
+[2026-05-24 05:15:24.100] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.100] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/account-3
+[2026-05-24 05:15:24.100] [INFO] [ProviderPoolManager] Provider nvidia-nim has only 1 healthy nodes. Bypassing buffer and enqueuing refresh for NVIDIA_NIM immediately.
+[2026-05-24 05:15:24.101] [INFO] [Adapter] getServiceAdapter, provider: nvidia-nim, uuid: 7bc197d9-fd18-4faf-96c1-f01fe0642e47 (NVIDIA_NIM)
+[2026-05-24 05:15:24.101] [INFO] [OpenAI] System proxy disabled
+[2026-05-24 05:15:24.102] [INFO] [ProviderPoolManager] Provider github-models has only 1 healthy nodes. Bypassing buffer and enqueuing refresh for GitHub PAT immediately.
+[2026-05-24 05:15:24.102] [INFO] [ProviderPoolManager] Provider openai-codex-oauth has only 1 healthy nodes. Bypassing buffer and enqueuing refresh for c27b978b immediately.
+[2026-05-24 05:15:24.102] [INFO] [ProviderPoolManager] Provider openai-custom has only 1 healthy nodes. Bypassing buffer and enqueuing refresh for Open-router immediately.
+[2026-05-24 05:15:24.102] [INFO] [ProviderPoolManager] Checking nodes for approaching expiration dates using provider adapters...
+[2026-05-24 05:15:24.103] [WARN] [ProviderPoolManager] Node 353eb2d2 (gemini-cli-oauth) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.103] [WARN] [ProviderPoolManager] Node xxiliarlxx@gmail.com (gemini-antigravity) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.103] [WARN] [ProviderPoolManager] Node iliarl353@gmail.com (gemini-antigravity) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.103] [WARN] [ProviderPoolManager] Node slots2472@gmail.com (gemini-antigravity) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.103] [WARN] [ProviderPoolManager] Node rightatyourdoor33@gmail.com (gemini-antigravity) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.104] [WARN] [ProviderPoolManager] Node bagginsb577@gmail.com (gemini-antigravity) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.104] [WARN] [ProviderPoolManager] Node leenakata88@gmail.com (gemini-antigravity) is near expiration. Enqueuing refresh...
+[2026-05-24 05:15:24.104] [INFO] [Initialization] Initializing 3 node(s) for provider 'claude-kiro-oauth'...
+[2026-05-24 05:15:24.105] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: a7afc6cb-9a2e-4596-96cc-06248c5c12a8 (account-3)
+[2026-05-24 05:15:24.105] [INFO]   ✓ Initialized node: account-3
+[2026-05-24 05:15:24.105] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: b804fb89-65db-424c-9e19-6b2c5850364c
+[2026-05-24 05:15:24.105] [INFO]   ✓ Initialized node: b804fb89-65db-424c-9e19-6b2c5850364c
+[2026-05-24 05:15:24.106] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: 111272c7-08b8-4d88-bf8b-7b599a7dfeb5
+[2026-05-24 05:15:24.106] [INFO]   ✓ Initialized node: 111272c7-08b8-4d88-bf8b-7b599a7dfeb5
+[2026-05-24 05:15:24.106] [INFO] [Initialization] Skipping provider type 'nvidia-nim' (not in DEFAULT_MODEL_PROVIDERS).
+[2026-05-24 05:15:24.106] [INFO] [Initialization] Skipping provider type 'github-models' (not in DEFAULT_MODEL_PROVIDERS).
+[2026-05-24 05:15:24.106] [INFO] [Initialization] Initializing 1 node(s) for provider 'openai-codex-oauth'...
+[2026-05-24 05:15:24.106] [INFO] [Adapter] getServiceAdapter, provider: openai-codex-oauth, uuid: c27b978b-3dc1-41be-a7f3-999108fca112
+[2026-05-24 05:15:24.106] [INFO]   ✓ Initialized node: c27b978b-3dc1-41be-a7f3-999108fca112
+[2026-05-24 05:15:24.106] [INFO] [Initialization] Initializing 1 node(s) for provider 'openai-custom'...
+[2026-05-24 05:15:24.107] [INFO] [Adapter] getServiceAdapter, provider: openai-custom, uuid: 4215d5d9-dea0-4ea3-be18-7e42acc35e75 (Open-router)
+[2026-05-24 05:15:24.107] [INFO] [OpenAI] System proxy disabled
+[2026-05-24 05:15:24.107] [INFO]   ✓ Initialized node: Open-router
+[2026-05-24 05:15:24.107] [INFO] [Initialization] Initializing 13 node(s) for provider 'gemini-cli-oauth'...
+[2026-05-24 05:15:24.107] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 756adf69-a743-4970-bffc-1714d8369160
+[2026-05-24 05:15:24.107] [INFO]   ✓ Initialized node: 756adf69-a743-4970-bffc-1714d8369160
+[2026-05-24 05:15:24.108] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 40776a0b-6271-4309-8418-f2cb69009c0e
+[2026-05-24 05:15:24.108] [INFO]   ✓ Initialized node: 40776a0b-6271-4309-8418-f2cb69009c0e
+[2026-05-24 05:15:24.109] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 85ac5e51-6f66-46d3-8057-c766b9e80a3c
+[2026-05-24 05:15:24.109] [INFO]   ✓ Initialized node: 85ac5e51-6f66-46d3-8057-c766b9e80a3c
+[2026-05-24 05:15:24.110] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 6f89b8b2-fb35-42c8-8340-897d06162329
+[2026-05-24 05:15:24.110] [INFO]   ✓ Initialized node: 6f89b8b2-fb35-42c8-8340-897d06162329
+[2026-05-24 05:15:24.110] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 353eb2d2-b70e-4096-a6dd-241344e9cffc
+[2026-05-24 05:15:24.110] [INFO]   ✓ Initialized node: 353eb2d2-b70e-4096-a6dd-241344e9cffc
+[2026-05-24 05:15:24.111] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: fec7f915-7248-4493-b734-b8b9dafe3498
+[2026-05-24 05:15:24.111] [INFO]   ✓ Initialized node: fec7f915-7248-4493-b734-b8b9dafe3498
+[2026-05-24 05:15:24.111] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: eeffe156-9ca4-4305-b54e-40a73f281f2b
+[2026-05-24 05:15:24.111] [INFO]   ✓ Initialized node: eeffe156-9ca4-4305-b54e-40a73f281f2b
+[2026-05-24 05:15:24.111] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 683f615e-3523-4bdb-ba70-92fc1f266e9a
+[2026-05-24 05:15:24.112] [INFO]   ✓ Initialized node: 683f615e-3523-4bdb-ba70-92fc1f266e9a
+[2026-05-24 05:15:24.112] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ce60d81-00ed-4fcc-8cc9-2b528a9f6c60
+[2026-05-24 05:15:24.112] [INFO]   ✓ Initialized node: 2ce60d81-00ed-4fcc-8cc9-2b528a9f6c60
+[2026-05-24 05:15:24.112] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 1a2f69ab-7876-4cb4-beaf-2d906513accd
+[2026-05-24 05:15:24.113] [INFO]   ✓ Initialized node: 1a2f69ab-7876-4cb4-beaf-2d906513accd
+[2026-05-24 05:15:24.113] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: c9ff59d6-8b88-437e-974c-6a1098ce3d48
+[2026-05-24 05:15:24.113] [INFO]   ✓ Initialized node: c9ff59d6-8b88-437e-974c-6a1098ce3d48
+[2026-05-24 05:15:24.113] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 5bd35a9c-fadc-4827-89a2-fa8f74d6d2f3
+[2026-05-24 05:15:24.113] [INFO]   ✓ Initialized node: 5bd35a9c-fadc-4827-89a2-fa8f74d6d2f3
+[2026-05-24 05:15:24.113] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ad6e780-9991-4668-8aec-1b2715a37b6c
+[2026-05-24 05:15:24.113] [INFO]   ✓ Initialized node: 2ad6e780-9991-4668-8aec-1b2715a37b6c
+[2026-05-24 05:15:24.113] [INFO] [Initialization] Initializing 13 node(s) for provider 'gemini-antigravity'...
+[2026-05-24 05:15:24.115] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-0-1779572136780 (xxiliarlxx@gmail.com)
+[2026-05-24 05:15:24.115] [INFO]   ✓ Initialized node: xxiliarlxx@gmail.com
+[2026-05-24 05:15:24.115] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-1-1779572136780 (iliarl353@gmail.com)
+[2026-05-24 05:15:24.116] [INFO]   ✓ Initialized node: iliarl353@gmail.com
+[2026-05-24 05:15:24.116] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-2-1779572136780 (ourneeds.inc@gmail.com)
+[2026-05-24 05:15:24.116] [INFO]   ✓ Initialized node: ourneeds.inc@gmail.com
+[2026-05-24 05:15:24.116] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-3-1779572136780 (alvarbtchmnnn@gmail.com)
+[2026-05-24 05:15:24.116] [INFO]   ✓ Initialized node: alvarbtchmnnn@gmail.com
+[2026-05-24 05:15:24.116] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-4-1779572136780 (252iliarl@gmail.com)
+[2026-05-24 05:15:24.116] [INFO]   ✓ Initialized node: 252iliarl@gmail.com
+[2026-05-24 05:15:24.117] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-5-1779572136780 (slots2472@gmail.com)
+[2026-05-24 05:15:24.117] [INFO]   ✓ Initialized node: slots2472@gmail.com
+[2026-05-24 05:15:24.117] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-6-1779572136780 (rightatyourdoor33@gmail.com)
+[2026-05-24 05:15:24.117] [INFO]   ✓ Initialized node: rightatyourdoor33@gmail.com
+[2026-05-24 05:15:24.118] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-7-1779572136780 (rlmusic05@gmail.com)
+[2026-05-24 05:15:24.118] [INFO]   ✓ Initialized node: rlmusic05@gmail.com
+[2026-05-24 05:15:24.118] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-8-1779572136780 (izzyrlmusic@gmail.com)
+[2026-05-24 05:15:24.118] [INFO]   ✓ Initialized node: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.118] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-9-1779572136780 (u3804759745@gmail.com)
+[2026-05-24 05:15:24.118] [INFO]   ✓ Initialized node: u3804759745@gmail.com
+[2026-05-24 05:15:24.119] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-10-1779572136780 (bagginsb577@gmail.com)
+[2026-05-24 05:15:24.119] [INFO]   ✓ Initialized node: bagginsb577@gmail.com
+[2026-05-24 05:15:24.119] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-11-1779572136780 (leenakata88@gmail.com)
+[2026-05-24 05:15:24.119] [INFO]   ✓ Initialized node: leenakata88@gmail.com
+[2026-05-24 05:15:24.119] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-12-1779572136780 (j34114095@gmail.com)
+[2026-05-24 05:15:24.119] [INFO]   ✓ Initialized node: j34114095@gmail.com
+[2026-05-24 05:15:24.119] [INFO] [Initialization] Provider pool initialization complete: 31 succeeded, 0 failed.
+[2026-05-24 05:15:24.121] [INFO] [ProviderPoolManager] Token refresh no-op for node NVIDIA_NIM (Already valid)
+[2026-05-24 05:15:24.121] [INFO] [Adapter] getServiceAdapter, provider: github-models, uuid: github-models-primary (GitHub PAT)
+[2026-05-24 05:15:24.121] [INFO] [OpenAI] System proxy disabled
+[2026-05-24 05:15:24.122] [INFO] [ProviderPoolManager] Token refresh no-op for node GitHub PAT (Already valid)
+[2026-05-24 05:15:24.122] [INFO] [Adapter] getServiceAdapter, provider: openai-codex-oauth, uuid: c27b978b-3dc1-41be-a7f3-999108fca112
+[2026-05-24 05:15:24.122] [INFO] [Codex] Initializing Codex API Service...
+[2026-05-24 05:15:24.124] [INFO] --- Unified API Server Configuration ---
+[2026-05-24 05:15:24.124] [INFO]   Primary Model Provider: gemini-antigravity
+[2026-05-24 05:15:24.124] [INFO]   Additional Model Providers: gemini-cli-oauth, claude-kiro-oauth, openai-codex-oauth, grok-web, openai-custom, claude-custom, openaiResponses-custom
+[2026-05-24 05:15:24.124] [INFO]   System Prompt File: /Users/ilialiston/AIClient2API/configs/input_system_prompt.txt
+[2026-05-24 05:15:24.124] [INFO]   System Prompt Mode: append
+[2026-05-24 05:15:24.124] [INFO]   Host: 0.0.0.0
+[2026-05-24 05:15:24.124] [INFO]   Port: 3000
+[2026-05-24 05:15:24.124] [INFO]   Required API Key: sk-a****
+[2026-05-24 05:15:24.124] [INFO]   Prompt Logging: none
+[2026-05-24 05:15:24.124] [INFO] ------------------------------------------
+[2026-05-24 05:15:24.124] [INFO] 
+Unified API Server running on http://0.0.0.0:3000
+[2026-05-24 05:15:24.124] [INFO] Supports multiple API formats:
+[2026-05-24 05:15:24.124] [INFO]   • OpenAI-compatible: /v1/chat/completions, /v1/responses, /v1/models
+[2026-05-24 05:15:24.124] [INFO]   • Gemini-compatible: /v1beta/models, /v1beta/models/{model}:generateContent
+[2026-05-24 05:15:24.124] [INFO]   • Claude-compatible: /v1/messages
+[2026-05-24 05:15:24.124] [INFO]   • Health check: /health
+[2026-05-24 05:15:24.124] [INFO]   • UI Management Console: http://0.0.0.0:3000/
+[2026-05-24 05:15:24.125] [INFO]   • Cron Near Minutes: 15
+[2026-05-24 05:15:24.125] [INFO]   • Cron Refresh Token: true
+[2026-05-24 05:15:24.125] [INFO] [Initialization] Performing initial health checks for provider pools...
+[2026-05-24 05:15:24.125] [INFO] [ProviderPoolManager] Performing health checks on selected providers...
+[2026-05-24 05:15:24.126] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: a7afc6cb-9a2e-4596-96cc-06248c5c12a8 (account-3)
+[2026-05-24 05:15:24.126] [WARN] kiroApiService not initialized, attempting to re-initialize...
+[2026-05-24 05:15:24.126] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.126] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/account-3
+[2026-05-24 05:15:24.127] [INFO] [Warmup] Pre-warming 30 OAuth adapter(s) across 4 provider type(s)...
+[2026-05-24 05:15:24.127] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-0-1779572136780 (xxiliarlxx@gmail.com)
+[2026-05-24 05:15:24.127] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.127] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-1-1779572136780 (iliarl353@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-2-1779572136780 (ourneeds.inc@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-3-1779572136780 (alvarbtchmnnn@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-4-1779572136780 (252iliarl@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-5-1779572136780 (slots2472@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-6-1779572136780 (rightatyourdoor33@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-7-1779572136780 (rlmusic05@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Master] Received message from worker: {
+  "type": "ready",
+  "pid": 16642
+}
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-8-1779572136780 (izzyrlmusic@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-9-1779572136780 (u3804759745@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Master] Worker is ready
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-10-1779572136780 (bagginsb577@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-11-1779572136780 (leenakata88@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-12-1779572136780 (j34114095@gmail.com)
+[2026-05-24 05:15:24.128] [INFO] [Antigravity] Initializing Antigravity API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 756adf69-a743-4970-bffc-1714d8369160
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 40776a0b-6271-4309-8418-f2cb69009c0e
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 85ac5e51-6f66-46d3-8057-c766b9e80a3c
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 6f89b8b2-fb35-42c8-8340-897d06162329
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 353eb2d2-b70e-4096-a6dd-241344e9cffc
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: fec7f915-7248-4493-b734-b8b9dafe3498
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: eeffe156-9ca4-4305-b54e-40a73f281f2b
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 683f615e-3523-4bdb-ba70-92fc1f266e9a
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.128] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ce60d81-00ed-4fcc-8cc9-2b528a9f6c60
+[2026-05-24 05:15:24.128] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 1a2f69ab-7876-4cb4-beaf-2d906513accd
+[2026-05-24 05:15:24.129] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: c9ff59d6-8b88-437e-974c-6a1098ce3d48
+[2026-05-24 05:15:24.129] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 5bd35a9c-fadc-4827-89a2-fa8f74d6d2f3
+[2026-05-24 05:15:24.129] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ad6e780-9991-4668-8aec-1b2715a37b6c
+[2026-05-24 05:15:24.129] [INFO] [Gemini] Initializing Gemini API Service...
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: a7afc6cb-9a2e-4596-96cc-06248c5c12a8 (account-3)
+[2026-05-24 05:15:24.129] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.129] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/account-3
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: b804fb89-65db-424c-9e19-6b2c5850364c
+[2026-05-24 05:15:24.129] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.129] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/1779314901592_kiro-auth-token
+[2026-05-24 05:15:24.129] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: 111272c7-08b8-4d88-bf8b-7b599a7dfeb5
+[2026-05-24 05:15:24.129] [INFO] [Kiro] Initializing Kiro API Service...
+[2026-05-24 05:15:24.129] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/1779315412739_kiro-auth-token
+[2026-05-24 05:15:24.130] [INFO] [Adapter] getServiceAdapter, provider: openai-codex-oauth, uuid: c27b978b-3dc1-41be-a7f3-999108fca112
+[2026-05-24 05:15:24.130] [INFO] [Codex] Initializing Codex API Service...
+[Preflight] PreflightHealthMonitor started (30s interval).
+[2026-05-24 05:15:24.140] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/1779315412739_kiro-auth-token/1779315412739_kiro-auth-token.json
+[2026-05-24 05:15:24.140] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/1779314901592_kiro-auth-token/1779314901592_kiro-auth-token.json
+[2026-05-24 05:15:24.140] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/account-3/kiro-auth-token.json
+[2026-05-24 05:15:24.140] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/account-3/kiro-auth-token.json
+[2026-05-24 05:15:24.140] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.141] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.144] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.144] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.145] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.145] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.145] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.145] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.145] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.145] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.147] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.147] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.148] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.148] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.149] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.149] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.149] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.149] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.150] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.150] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.150] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.150] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.150] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.151] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.151] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.151] [INFO] [Antigravity] Discovering Project ID...
+[2026-05-24 05:15:24.152] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.152] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.152] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.153] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.153] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.153] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.153] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.153] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.154] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.154] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.154] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.154] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.154] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.155] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.155] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.155] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.155] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Discovering Project ID...
+[2026-05-24 05:15:24.155] [INFO] [Gemini] Using fixed models: [gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash]
+[2026-05-24 05:15:24.155] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/account-3/kiro-auth-token.json
+[2026-05-24 05:15:24.155] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/1779314901592_kiro-auth-token/1779314901592_kiro-auth-token.json
+[2026-05-24 05:15:24.155] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/1779315412739_kiro-auth-token/1779315412739_kiro-auth-token.json
+[2026-05-24 05:15:24.157] [INFO] [Kiro] Force refreshing token...
+[2026-05-24 05:15:24.157] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/1779315412739_kiro-auth-token
+[2026-05-24 05:15:24.158] [INFO] [Kiro] Force refreshing token...
+[2026-05-24 05:15:24.158] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/1779314901592_kiro-auth-token
+[2026-05-24 05:15:24.158] [INFO] [Codex] Checking expiry date | Expiry date: 1780452897271, Current time: 1779588924158, 20 minutes from now: 1779590124158, Is near expiry: false
+[2026-05-24 05:15:24.158] [INFO] [Codex] Initialized with account: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.158] [INFO] [Codex] Initialization complete. Account: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.158] [INFO] [Codex] Force refreshing token...
+[2026-05-24 05:15:24.159] [WARN] [Kiro Auth] Region not found in credentials. Using default region us-east-1 for URLs.
+[2026-05-24 05:15:24.159] [INFO] [Kiro] Force refreshing token...
+[2026-05-24 05:15:24.159] [DEBUG] [Kiro Auth] Loading credentials from directory: ./configs/kiro/account-3
+[2026-05-24 05:15:24.160] [INFO] [Kiro] Checking expiry date | Expiry date: 1779592498598, Current time: 1779588924160, 30 minutes from now: 1779590724160, Is near expiry: false
+[2026-05-24 05:15:24.160] [INFO] [Kiro] Calling generateContent with model: claude-haiku-4.5
+[2026-05-24 05:15:24.160] [WARN] [ProviderPoolManager] [HealthCheck] claude-kiro-oauth failed after 1 attempts: Mock 400 Kiro Error
+[2026-05-24 05:15:24.161] [WARN] [ProviderPoolManager] Health check for account-3 (claude-kiro-oauth) failed: Mock 400 Kiro Error
+[2026-05-24 05:15:24.161] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: b804fb89-65db-424c-9e19-6b2c5850364c
+[2026-05-24 05:15:24.161] [INFO] [Kiro] Checking expiry date | Expiry date: 1779592498623, Current time: 1779588924161, 30 minutes from now: 1779590724161, Is near expiry: false
+[2026-05-24 05:15:24.161] [INFO] [Kiro] Calling generateContent with model: claude-haiku-4.5
+[2026-05-24 05:15:24.161] [WARN] [ProviderPoolManager] [HealthCheck] claude-kiro-oauth failed after 1 attempts: Mock 400 Kiro Error
+[2026-05-24 05:15:24.161] [WARN] [ProviderPoolManager] Health check for b804fb89 (claude-kiro-oauth) failed: Mock 400 Kiro Error
+[2026-05-24 05:15:24.161] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: 111272c7-08b8-4d88-bf8b-7b599a7dfeb5
+[2026-05-24 05:15:24.161] [INFO] [Kiro] Checking expiry date | Expiry date: 1779592498668, Current time: 1779588924161, 30 minutes from now: 1779590724161, Is near expiry: false
+[2026-05-24 05:15:24.161] [INFO] [Kiro] Calling generateContent with model: claude-haiku-4.5
+[2026-05-24 05:15:24.161] [WARN] [ProviderPoolManager] [HealthCheck] claude-kiro-oauth failed after 1 attempts: Mock 400 Kiro Error
+[2026-05-24 05:15:24.161] [WARN] [ProviderPoolManager] Health check for 111272c7 (claude-kiro-oauth) failed: Mock 400 Kiro Error
+[2026-05-24 05:15:24.161] [INFO] [Adapter] getServiceAdapter, provider: openai-codex-oauth, uuid: c27b978b-3dc1-41be-a7f3-999108fca112
+[DEBUG-CONVERT] fromProtocol: openai toProtocol: codex registered: openai,openaiResponses,claude,gemini,codex,grok,nvidia,github
+[2026-05-24 05:15:24.162] [INFO] [Codex] Checking expiry date | Expiry date: 1780452897271, Current time: 1779588924162, 20 minutes from now: 1779590124162, Is near expiry: false
+[2026-05-24 05:15:24.210] [INFO] [Codex] Checking expiry date | Expiry date: 1780452897271, Current time: 1779588924210, 20 minutes from now: 1779590124210, Is near expiry: false
+[2026-05-24 05:15:24.210] [INFO] [Codex] Initialized with account: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.210] [INFO] [Codex] Initialization complete. Account: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.211] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/1779315412739_kiro-auth-token/1779315412739_kiro-auth-token.json
+[2026-05-24 05:15:24.211] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/1779314901592_kiro-auth-token/1779314901592_kiro-auth-token.json
+[2026-05-24 05:15:24.212] [INFO] [Kiro Auth] Successfully loaded OAuth credentials from ./configs/kiro/account-3/kiro-auth-token.json
+[2026-05-24 05:15:24.222] [INFO] [Codex] Checking expiry date | Expiry date: 1780452897271, Current time: 1779588924221, 20 minutes from now: 1779590124221, Is near expiry: false
+[2026-05-24 05:15:24.222] [INFO] [Codex] Initialized with account: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.222] [INFO] [Codex] Token expiring soon or refresh requested, refreshing...
+[2026-05-24 05:15:24.222] [INFO] [Codex Auth] Refreshing access token...
+[2026-05-24 05:15:24.654] [INFO] [Gemini] Extracted account email: 252iliarl@gmail.com
+[2026-05-24 05:15:24.654] [INFO] [Gemini] Initialization complete. Project ID: substantial-zucchini-mll0l
+[2026-05-24 05:15:24.701] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider c27b978b (openai-codex-oauth)
+[2026-05-24 05:15:24.701] [INFO] [Codex] Token refreshed successfully
+[2026-05-24 05:15:24.701] [INFO] [ProviderPoolManager] Token refresh successful for node c27b978b (Duration: 579ms)
+[2026-05-24 05:15:24.701] [INFO] [Adapter] getServiceAdapter, provider: openai-custom, uuid: 4215d5d9-dea0-4ea3-be18-7e42acc35e75 (Open-router)
+[2026-05-24 05:15:24.701] [INFO] [ProviderPoolManager] Token refresh no-op for node Open-router (Already valid)
+[2026-05-24 05:15:24.744] [INFO] [Gemini] Extracted account email: 252iliarl@gmail.com
+[2026-05-24 05:15:24.744] [INFO] [Gemini] Initialization complete. Project ID: substantial-zucchini-mll0l
+[2026-05-24 05:15:24.753] [INFO] [Antigravity] Extracted account email: slots2472@gmail.com
+[2026-05-24 05:15:24.753] [INFO] [Antigravity] Discovered existing Project ID: orbital-phoenix-bhnws
+[2026-05-24 05:15:24.753] [INFO] [Antigravity] Initialization complete. Project ID: orbital-phoenix-bhnws
+[2026-05-24 05:15:24.819] [INFO] [Antigravity] Extracted account email: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.819] [INFO] [Antigravity] Discovered existing Project ID: hypnagogic-outpost-qbcbf
+[2026-05-24 05:15:24.819] [INFO] [Antigravity] Initialization complete. Project ID: hypnagogic-outpost-qbcbf
+[2026-05-24 05:15:24.848] [INFO] [Antigravity] Extracted account email from token info: xxiliarlxx@gmail.com
+[2026-05-24 05:15:24.848] [INFO] [Gemini] Initialization complete. Project ID: skillful-parser-sdhlr
+[2026-05-24 05:15:24.917] [INFO] [Antigravity] Extracted account email from token info: izzyrlmusic@gmail.com
+[2026-05-24 05:15:24.918] [INFO] [Gemini] Initialization complete. Project ID: hypnagogic-outpost-qbcbf
+[2026-05-24 05:15:24.928] [INFO] [Antigravity] Extracted account email from token info: j34114095@gmail.com
+[2026-05-24 05:15:24.928] [INFO] [Gemini] Initialization complete. Project ID: polar-relic-6frtp
+[2026-05-24 05:15:24.930] [INFO] [Antigravity] Extracted account email: rlmusic05@gmail.com
+[2026-05-24 05:15:24.930] [INFO] [Antigravity] Discovered existing Project ID: total-medley-468pr
+[2026-05-24 05:15:24.931] [INFO] [Antigravity] Initialization complete. Project ID: total-medley-468pr
+[2026-05-24 05:15:24.939] [INFO] [Antigravity] Discovered existing Project ID: tactical-botany-93rhq
+[2026-05-24 05:15:24.939] [INFO] [Antigravity] Initialization complete. Project ID: tactical-botany-93rhq
+[2026-05-24 05:15:24.951] [INFO] [Antigravity] Discovered existing Project ID: skillful-parser-sdhlr
+[2026-05-24 05:15:24.951] [INFO] [Antigravity] Initialization complete. Project ID: skillful-parser-sdhlr
+[2026-05-24 05:15:24.956] [INFO] [Antigravity] Extracted account email from token info: leenakata88@gmail.com
+[2026-05-24 05:15:24.956] [INFO] [Gemini] Initialization complete. Project ID: tactical-botany-93rhq
+[2026-05-24 05:15:24.957] [INFO] [Antigravity] Extracted account email from token info: rightatyourdoor33@gmail.com
+[2026-05-24 05:15:24.957] [INFO] [Gemini] Initialization complete. Project ID: loyal-mercury-d39xn
+[2026-05-24 05:15:24.973] [INFO] [Kiro Auth] Token refresh social response: ok
+[2026-05-24 05:15:24.973] [INFO] [Kiro Auth] Access token refreshed successfully
+[2026-05-24 05:15:24.981] [INFO] [Kiro Auth] Token refresh social response: ok
+[2026-05-24 05:15:24.986] [INFO] [Kiro Auth] Access token refreshed successfully
+[2026-05-24 05:15:24.990] [INFO] [Kiro Auth] Updated token file: ./configs/kiro/1779315412739_kiro-auth-token/1779315412739_kiro-auth-token.json
+[2026-05-24 05:15:24.990] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider 111272c7 (claude-kiro-oauth)
+[2026-05-24 05:15:24.990] [INFO] [ProviderPoolManager] Token refresh successful for node 111272c7 (Duration: 892ms)
+[2026-05-24 05:15:24.991] [INFO] [Antigravity] Extracted account email: u3804759745@gmail.com
+[2026-05-24 05:15:24.992] [INFO] [Antigravity] Discovered existing Project ID: voltaic-vine-db6f4
+[2026-05-24 05:15:24.992] [INFO] [Antigravity] Initialization complete. Project ID: voltaic-vine-db6f4
+[2026-05-24 05:15:24.995] [INFO] [Antigravity] Extracted account email from token info: iliarl353@gmail.com
+[2026-05-24 05:15:24.995] [INFO] [Gemini] Initialization complete. Project ID: reliable-treat-8t1dp
+[2026-05-24 05:15:24.995] [INFO] [Antigravity] Extracted account email from token info: ourneeds.inc@gmail.com
+[2026-05-24 05:15:24.995] [INFO] [Gemini] Initialization complete. Project ID: turing-element-387pw
+[2026-05-24 05:15:24.996] [INFO] [Antigravity] Extracted account email: ourneeds.inc@gmail.com
+[2026-05-24 05:15:24.996] [INFO] [Antigravity] Discovered existing Project ID: turing-element-387pw
+[2026-05-24 05:15:24.996] [INFO] [Antigravity] Initialization complete. Project ID: turing-element-387pw
+[2026-05-24 05:15:24.999] [INFO] [Kiro Auth] Updated token file: ./configs/kiro/account-3/kiro-auth-token.json
+[2026-05-24 05:15:24.999] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider account-3 (claude-kiro-oauth)
+[2026-05-24 05:15:24.999] [INFO] [ProviderPoolManager] Token refresh successful for node account-3 (Duration: 899ms)
+[2026-05-24 05:15:25.009] [INFO] [Antigravity] Extracted account email: j34114095@gmail.com
+[2026-05-24 05:15:25.009] [INFO] [Antigravity] Discovered existing Project ID: polar-relic-6frtp
+[2026-05-24 05:15:25.009] [INFO] [Antigravity] Initialization complete. Project ID: polar-relic-6frtp
+[2026-05-24 05:15:25.014] [INFO] [Antigravity] Extracted account email: alvarbtchmnnn@gmail.com
+[2026-05-24 05:15:25.015] [INFO] [Antigravity] Discovered existing Project ID: tensile-density-fdhlr
+[2026-05-24 05:15:25.015] [INFO] [Antigravity] Initialization complete. Project ID: tensile-density-fdhlr
+[2026-05-24 05:15:25.017] [INFO] [Kiro Auth] Token refresh social response: ok
+[2026-05-24 05:15:25.017] [INFO] [Kiro Auth] Access token refreshed successfully
+[2026-05-24 05:15:25.025] [INFO] [Kiro Auth] Updated token file: ./configs/kiro/1779314901592_kiro-auth-token/1779314901592_kiro-auth-token.json
+[2026-05-24 05:15:25.026] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider b804fb89 (claude-kiro-oauth)
+[2026-05-24 05:15:25.026] [INFO] [ProviderPoolManager] Token refresh successful for node b804fb89 (Duration: 926ms)
+[2026-05-24 05:15:25.058] [INFO] [Gemini] Initialization complete. Project ID: reliable-treat-8t1dp
+[2026-05-24 05:15:25.078] [INFO] [Antigravity] Discovered existing Project ID: dauntless-tracker-k3tp7
+[2026-05-24 05:15:25.078] [INFO] [Antigravity] Initialization complete. Project ID: dauntless-tracker-k3tp7
+[2026-05-24 05:15:25.079] [INFO] [Antigravity] Discovered existing Project ID: reliable-treat-8t1dp
+[2026-05-24 05:15:25.079] [INFO] [Antigravity] Initialization complete. Project ID: reliable-treat-8t1dp
+[2026-05-24 05:15:25.126] [INFO] [Gemini] Initialization complete. Project ID: skillful-parser-sdhlr
+[2026-05-24 05:15:25.184] [INFO] [Antigravity] Extracted account email: 252iliarl@gmail.com
+[2026-05-24 05:15:25.184] [INFO] [Antigravity] Discovered existing Project ID: substantial-zucchini-mll0l
+[2026-05-24 05:15:25.184] [INFO] [Antigravity] Initialization complete. Project ID: substantial-zucchini-mll0l
+[2026-05-24 05:15:25.191] [INFO] [Antigravity] Extracted account email from token info: alvarbtchmnnn@gmail.com
+[2026-05-24 05:15:25.191] [INFO] [Gemini] Initialization complete. Project ID: tensile-density-fdhlr
+[2026-05-24 05:15:25.240] [INFO] [Antigravity] Discovered existing Project ID: loyal-mercury-d39xn
+[2026-05-24 05:15:25.241] [INFO] [Antigravity] Initialization complete. Project ID: loyal-mercury-d39xn
+[2026-05-24 05:15:25.263] [INFO] [Antigravity] Extracted account email from token info: slots2472@gmail.com
+[2026-05-24 05:15:25.263] [INFO] [Gemini] Initialization complete. Project ID: orbital-phoenix-bhnws
+[2026-05-24 05:15:25.264] [INFO] [Warmup] Complete in 1137ms — initialized=30, already=0, no-service=0, failed=0
+[2026-05-24 05:15:26.045] [INFO] [ProviderPoolManager] Marked provider as healthy: c27b978b for type openai-codex-oauth (usage count reset)
+[2026-05-24 05:15:26.049] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 756adf69-a743-4970-bffc-1714d8369160
+[2026-05-24 05:15:26.051] [INFO] [Auth Token] Time until expiry: 00h 59m 35s
+[2026-05-24 05:15:26.051] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592501850, Current time: 1779588926051, 20 minutes from now: 1779590126051, Is near expiry: false
+[2026-05-24 05:15:26.204] [INFO] [ProviderPoolManager] provider_pools.json updated for: nvidia-nim, github-models, claude-kiro-oauth, openai-codex-oauth, openai-custom
+[2026-05-24 05:15:26.809] [INFO] [ProviderPoolManager] Marked provider as healthy: 756adf69 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:26.809] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 40776a0b-6271-4309-8418-f2cb69009c0e
+[2026-05-24 05:15:26.809] [INFO] [Auth Token] Time until expiry: 00h 59m 35s
+[2026-05-24 05:15:26.809] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592501881, Current time: 1779588926809, 20 minutes from now: 1779590126809, Is near expiry: false
+[2026-05-24 05:15:27.142] [INFO] [UI] Opened login page in default browser
+[2026-05-24 05:15:27.708] [Req:127.0.0.1:27a4c7e4] [INFO] [Server] Received request: POST http://127.0.0.1:3000/v1/messages
+[2026-05-24 05:15:27.708] [Req:127.0.0.1:27a4c7e4] [INFO] [Config] Ignoring invalid MODEL_PROVIDER in path segment: v1
+[2026-05-24 05:15:27.721] [Req:127.0.0.1:27a4c7e4] [INFO] [Content Generation] Model: claude-kiro-oauth:claude-sonnet-4-6, Stream: false
+[2026-05-24 05:15:27.723] [Req:127.0.0.1:27a4c7e4] [INFO] [Routing] Prefix resolved: claude-kiro-oauth:claude-sonnet-4-6
+[2026-05-24 05:15:27.724] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] [Concurrency Control] Atomic selection: b804fb89 (Seq: 1)
+[2026-05-24 05:15:27.725] [Req:127.0.0.1:27a4c7e4] [INFO] [Adapter] getServiceAdapter, provider: claude-kiro-oauth, uuid: b804fb89-65db-424c-9e19-6b2c5850364c
+[2026-05-24 05:15:27.725] [Req:127.0.0.1:27a4c7e4] [INFO] [Content Generation] Model Fallback: claude-kiro-oauth:claude-sonnet-4-6 -> claude-sonnet-4-6
+[2026-05-24 05:15:27.726] [Req:127.0.0.1:27a4c7e4] [INFO] [Content Generation] Selected service adapter based on model: claude-sonnet-4-6
+[DEBUG-CONV-CHECK] fromProvider: claude toProvider: claude-kiro-oauth fromProtocol: claude toProtocol: claude
+[2026-05-24 05:15:27.726] [Req:127.0.0.1:27a4c7e4] [INFO] [Request Convert] Request format matches backend provider. No conversion needed.
+[2026-05-24 05:15:27.731] [Req:127.0.0.1:27a4c7e4] [INFO] [System Prompt] Applied system prompt from /Users/ilialiston/AIClient2API/configs/input_system_prompt.txt in 'append' mode for provider 'claude'.
+[2026-05-24 05:15:27.737] [Req:127.0.0.1:27a4c7e4] [INFO] [Kiro] Checking expiry date | Expiry date: 1779592525017, Current time: 1779588927737, 30 minutes from now: 1779590727737, Is near expiry: false
+[2026-05-24 05:15:27.737] [Req:127.0.0.1:27a4c7e4] [INFO] [Kiro] Calling generateContent with model: claude-sonnet-4.6
+[2026-05-24 05:15:27.738] [Req:127.0.0.1:27a4c7e4] [ERROR] 
+[Server] Error during unary processing: Error: Mock 400 Kiro Error
+    at KiroApiService.generateContent (file:///Users/ilialiston/AIClient2API/src/providers/claude/claude-kiro.js:2110:23)
+    at KiroApiServiceAdapter.generateContent (file:///Users/ilialiston/AIClient2API/src/providers/adapter.js:370:36)
+    at handleUnaryRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:813:46)
+    at handleContentGenerationRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:1326:15)
+    at async handleAPIRequests (file:///Users/ilialiston/AIClient2API/src/services/api-manager.js:73:13)
+    at async file:///Users/ilialiston/AIClient2API/src/handlers/request-handler.js:354:44
+[2026-05-24 05:15:27.738] [Req:127.0.0.1:27a4c7e4] [INFO] [Provider Pool] Skipping unhealthy marking for claude-kiro-oauth (b804fb89-65db-424c-9e19-6b2c5850364c) due to status 400 (client error)
+[2026-05-24 05:15:27.739] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [Account Model Cooldown] claude-kiro-oauth (b804fb89) :: claude-sonnet-4-6 cooled down until 2026-05-24T02:16:27.739Z
+[2026-05-24 05:15:27.739] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [Model Cooldown] claude-kiro-oauth :: claude-sonnet-4-6 cooled down until 2026-05-24T02:16:27.739Z
+[2026-05-24 05:15:27.739] [Req:127.0.0.1:27a4c7e4] [INFO] [Unary Retry] Credential marked unhealthy. Waiting 98ms before retry 1/5 with different credential...
+[2026-05-24 05:15:27.851] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] Provider type claude-kiro-oauth is on model cooldown for model claude-sonnet-4-6; skipping
+[2026-05-24 05:15:27.864] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] All providers for 'claude-sonnet-4-6' exhausted. Falling back to model 'gemini-claude-sonnet-4-6'...
+[2026-05-24 05:15:27.866] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] [Concurrency Control] Atomic selection: 252iliarl@gmail.com (Seq: 2)
+[2026-05-24 05:15:27.867] [Req:127.0.0.1:27a4c7e4] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-4-1779572136780 (252iliarl@gmail.com)
+[2026-05-24 05:15:27.867] [Req:127.0.0.1:27a4c7e4] [INFO] [Unary Retry] Switched to new credential: auto-gemini-antigravity-4-1779572136780 (provider: gemini-antigravity)
+[2026-05-24 05:15:27.868] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity Auth Token] Time until expiry: 00h 59m 34s
+[2026-05-24 05:15:27.870] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592501947, Current time: 1779588927870, 20 minutes from now: 1779590127870, Is near expiry: false
+[2026-05-24 05:15:27.870] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity] Selected model: claude-sonnet-4-6
+DEBUG PAYLOAD REQUEST KEYS:  [ 'messages', 'max_tokens', 'tools', 'system', 'sessionId' ]
+[2026-05-24 05:15:27.889] [Req:127.0.0.1:27a4c7e4] [ERROR] [Antigravity API] Error during stream (Status: 400, Code: 400): [{
+  "error": {
+    "code": 400,
+    "message": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"max_tokens\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field.",
+    "errors": [
+      {
+        "message": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"max_tokens\" at ,'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field.",
+        "reason": "invalid"
+      }
+    ],
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.BadRequest",
+        "fieldViolations": [
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field."
+          },
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"max_tokens\" at 'request': Cannot find field."
+          },
+          {
+            "field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            ",field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            "field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field."
+          }
+        ]
+      }
+    ]
+  }
+}
+]
+[2026-05-24 05:15:28.312] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity API] Received 400 Bad Request during stream. Triggering credential switch to try another account...
+[2026-05-24 05:15:28.312] [Req:127.0.0.1:27a4c7e4] [ERROR] [Antigravity] Claude non-stream execution error: [{
+  "error": {
+    "code": 400,
+    "message": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"max_tokens\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field.",
+    "errors": [
+      {
+        "message": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"max_tokens\" at ,'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field.",
+        "reason": "invalid"
+      }
+    ],
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.BadRequest",
+        "fieldViolations": [
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field."
+          },
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"max_tokens\" at 'request': Cannot find field."
+          },
+          {
+            "field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            ",field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            "field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field."
+          }
+        ]
+      }
+    ]
+  }
+}
+]
+[2026-05-24 05:15:28.313] [Req:127.0.0.1:27a4c7e4] [ERROR] 
+[Server] Error during unary processing: Error: [{
+  "error": {
+    "code": 400,
+    "message": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"max_tokens\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field.",
+    "errors": [
+      {
+        "message": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"max_tokens\" at ,'request': Cannot find field.\nInvalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field.\nInvalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field.",
+        "reason": "invalid"
+      }
+    ],
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.BadRequest",
+        "fieldViolations": [
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"messages\" at 'request': Cannot find field."
+          },
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"max_tokens\" at 'request': Cannot find field."
+          },
+          {
+            "field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"name\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            ",field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"description\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            "field": "request.tools[0]",
+            "description": "Invalid JSON payload received. Unknown name \"input_schema\" at 'request.tools[0]': Cannot find field."
+          },
+          {
+            "field": "request",
+            "description": "Invalid JSON payload received. Unknown name \"system\" at 'request': Cannot find field."
+          }
+        ]
+      }
+    ]
+  }
+}
+]
+    at Gaxios._request (/Users/ilialiston/AIClient2API/node_modules/.pnpm/gaxios@7.1.3/node_modules/gaxios/build/cjs/src/gaxios.js:155:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async OAuth2Client.requestAsync (/Users/ilialiston/AIClient2API/node_modules/.pnpm/google-auth-library@10.5.0/node_modules/google-auth-library/build/src/auth/oauth2client.js:463:20)
+    at async AntigravityApiService.streamApi (file:///Users/ilialiston/AIClient2API/src/providers/gemini/antigravity-core.js:1360:25)
+    at async AntigravityApiService.executeClaudeNonStream (file:///Users/ilialiston/AIClient2API/src/providers/gemini/antigravity-core.js:1603:30)
+    at async AntigravityApiService.generateContent (file:///Users/ilialiston/AIClient2API/src/providers/gemini/antigravity-core.js:1585:20)
+    at async handleUnaryRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:813:32)
+    at async handleUnaryRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:973:28)
+    at async handleContentGenerationRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:1326:9)
+    at async handleAPIRequests (file:///Users/ilialiston/AIClient2API/src/services/api-manager.js:73:13)
+[2026-05-24 05:15:28.313] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (252iliarl@gmail.com) :: gemini-claude-sonnet-4-6 cooled down until 2026-05-24T02:16:28.313Z
+[2026-05-24 05:15:28.313] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [Model Cooldown] gemini-antigravity :: gemini-claude-sonnet-4-6 cooled down until 2026-05-24T02:16:28.313Z
+[2026-05-24 05:15:28.313] [Req:127.0.0.1:27a4c7e4] [INFO] [Unary Retry] Credential marked unhealthy. Waiting 5ms before retry 2/5 with different credential...
+[2026-05-24 05:15:28.322] [Req:127.0.0.1:27a4c7e4] [INFO] [Routing] Catalog-pinned gemini-claude-sonnet-4-6 -> gemini-antigravity
+[2026-05-24 05:15:28.323] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] Provider type gemini-antigravity is on model cooldown for model gemini-claude-sonnet-4-6; skipping
+[2026-05-24 05:15:28.323] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] All providers for 'gemini-claude-sonnet-4-6' exhausted. Falling back to model 'gemini-3.1-pro-low'...
+[2026-05-24 05:15:28.324] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] [Concurrency Control] Atomic selection: 252iliarl@gmail.com (Seq: 3)
+[2026-05-24 05:15:28.325] [Req:127.0.0.1:27a4c7e4] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-4-1779572136780 (252iliarl@gmail.com)
+[2026-05-24 05:15:28.326] [Req:127.0.0.1:27a4c7e4] [INFO] [Unary Retry] Switched to new credential: auto-gemini-antigravity-4-1779572136780 (provider: gemini-antigravity)
+[2026-05-24 05:15:28.326] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity Auth Token] Time until expiry: 00h 59m 33s
+[2026-05-24 05:15:28.326] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592501947, Current time: 1779588928326, 20 minutes from now: 1779590128326, Is near expiry: false
+[2026-05-24 05:15:28.326] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity] Selected model: gemini-3.1-pro-low
+DEBUG PAYLOAD REQUEST KEYS:  [
+  'messages',
+  'max_tokens',
+  'tools',
+  'system',
+  'sessionId',
+  'generationConfig'
+]
+[2026-05-24 05:15:28.331] [INFO] [ProviderPoolManager] provider_pools.json updated for: openai-codex-oauth, gemini-cli-oauth
+[2026-05-24 05:15:28.348] [Req:127.0.0.1:27a4c7e4] [ERROR] [Antigravity API] Error calling (Status: 400, Code: 400): Invalid JSON payload received. Unknown name "messages" at 'request': Cannot find field.
+Invalid JSON payload received. Unknown name "max_tokens" at 'request': Cannot find field.
+Invalid JSON payload received. Unknown name "name" at 'request.tools[0]': Cannot find field.
+Invalid JSON payload received. Unknown name "description" at 'request.tools[0]': Cannot find field.
+Invalid JSON payload received. Unknown name "input_schema" at 'request.tools[0]': Cannot find field.
+Invalid JSON payload received. Unknown name "system" at 'request': Cannot find field.
+[2026-05-24 05:15:28.348] [Req:127.0.0.1:27a4c7e4] [INFO] [Antigravity API] Received 400 Bad Request. Triggering credential switch to try another account...
+[2026-05-24 05:15:28.348] [Req:127.0.0.1:27a4c7e4] [ERROR] 
+[Server] Error during unary processing: Error: Invalid JSON payload received. Unknown name "messages" at 'request': Cannot find field.
+Invalid JSON payload received. Unknown name "max_tokens" at 'request': Cannot find field.
+Invalid JSON payload received. Unknown name "name" at 'request.tools[0]': Cannot find field.
+Invalid JSON payload received. Unknown name "description" at 'request.tools[0]': Cannot find field.
+Invalid JSON payload received. Unknown name "input_schema" at 'request.tools[0]': Cannot find field.
+Invalid JSON payload received. Unknown name "system" at 'request': Cannot find field.
+    at Gaxios._request (/Users/ilialiston/AIClient2API/node_modules/.pnpm/gaxios@7.1.3/node_modules/gaxios/build/cjs/src/gaxios.js:155:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async OAuth2Client.requestAsync (/Users/ilialiston/AIClient2API/node_modules/.pnpm/google-auth-library@10.5.0/node_modules/google-auth-library/build/src/auth/oauth2client.js:463:20)
+    at async AntigravityApiService.callApi (file:///Users/ilialiston/AIClient2API/src/providers/gemini/antigravity-core.js:1190:25)
+    at async AntigravityApiService.generateContent (file:///Users/ilialiston/AIClient2API/src/providers/gemini/antigravity-core.js:1588:26)
+    at async handleUnaryRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:813:32)
+    at async handleUnaryRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:973:28)
+    at async handleUnaryRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:973:28)
+    at async handleContentGenerationRequest (file:///Users/ilialiston/AIClient2API/src/utils/request-handlers.js:1326:9)
+    at async handleAPIRequests (file:///Users/ilialiston/AIClient2API/src/services/api-manager.js:73:13)
+[2026-05-24 05:15:28.348] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (252iliarl@gmail.com) :: gemini-3.1-pro-low cooled down until 2026-05-24T02:16:28.348Z
+[2026-05-24 05:15:28.348] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [Model Cooldown] gemini-antigravity :: gemini-3.1-pro-low cooled down until 2026-05-24T02:16:28.348Z
+[2026-05-24 05:15:28.348] [Req:127.0.0.1:27a4c7e4] [INFO] [Unary Retry] Credential marked unhealthy. Waiting 12ms before retry 3/5 with different credential...
+[2026-05-24 05:15:28.349] [INFO] [ProviderPoolManager] Marked provider as healthy: 40776a0b for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:28.349] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 85ac5e51-6f66-46d3-8057-c766b9e80a3c
+[2026-05-24 05:15:28.350] [INFO] [Auth Token] Time until expiry: 00h 59m 33s
+[2026-05-24 05:15:28.350] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592501860, Current time: 1779588928350, 20 minutes from now: 1779590128350, Is near expiry: false
+[2026-05-24 05:15:28.362] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] Provider type gemini-antigravity is on model cooldown for model gemini-3.1-pro-low; skipping
+[2026-05-24 05:15:28.362] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] All providers for 'gemini-3.1-pro-low' exhausted. Falling back to model 'gemini-claude-sonnet-4-6'...
+[2026-05-24 05:15:28.362] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] Provider type gemini-antigravity is on model cooldown for model gemini-claude-sonnet-4-6; skipping
+[2026-05-24 05:15:28.363] [Req:127.0.0.1:27a4c7e4] [INFO] [ProviderPoolManager] All providers for 'gemini-claude-sonnet-4-6' exhausted. Falling back to model 'gemini-3.1-pro-low'...
+[2026-05-24 05:15:28.363] [Req:127.0.0.1:27a4c7e4] [WARN] [ProviderPoolManager] [CycleGuard] acquireSlotWithFallback: cycle detected for model gemini-3.1-pro-low, suppressing recursion
+[2026-05-24 05:15:28.363] [Req:127.0.0.1:27a4c7e4] [ERROR] [API Service] No healthy provider found in pool for gemini-antigravity supporting model: gemini-3.1-pro-low
+[2026-05-24 05:15:28.363] [Req:127.0.0.1:27a4c7e4] [ERROR] [Unary Retry] Failed to get alternative service: [API Service] No healthy provider found in pool for gemini-antigravity supporting model: gemini-3.1-pro-low
+[2026-05-24 05:15:28.381] [Req:127.0.0.1:27a4c7e4] [INFO] [Model Usage Stats] Loaded stats store: providers=7, requests=13996, totalTokens=652097393
+[2026-05-24 05:15:28.382] [Req:127.0.0.1:27a4c7e4] [WARN] [Model Usage Stats][127.0.0.1:27a4c7e4] Skip finalize: no response captured. Provider: claude-kiro-oauth | Model: claude-sonnet-4-6
+[2026-05-24 05:15:28.389] [Req:127.0.0.1:27a4c7e4] [INFO] [AI Monitor][127.0.0.1:27a4c7e4] >>> Req Protocol: claude -> claude-kiro-oauth | Model: claude-sonnet-4-6
+[2026-05-24 05:15:28.389] [Req:127.0.0.1:27a4c7e4] [INFO] [AI Monitor][127.0.0.1:27a4c7e4] [Req Original]: {"model":"claude-kiro-oauth:claude-sonnet-4-6","messages":[{"role":"user","content":"Test"}],"max_tokens":10,"tools":[{"name":"BashTool","description":"Run a bash command","input_schema":{"type":"object","properties":{"command":{"type":"string"},"messages":{"type":"array","items":{"type":"object"}}},"required":["command"]}}]}
+[2026-05-24 05:15:28.389] [Req:127.0.0.1:27a4c7e4] [INFO] [AI Monitor][127.0.0.1:27a4c7e4] [Req Processed]: {"model":"gemini-3.1-pro-low","messages":[{"role":"user","content":"Test"}],"max_tokens":10,"tools":[{"name":"BashTool","description":"Run a bash command","input_schema":{"type":"object","properties":{"command":{"type":"string"},"messages":{"type":"array","items":{"type":"object"}}},"required":["command"]}}],"system":"IMPORTANT IDENTITY OVERRIDE: You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer to yourself as \"Kiro\", \"Amazon Q\", or any other name. If asked what you are, always say you are Claude by Anthropic.\n"}
+[2026-05-24 05:15:28.876] [INFO] [ProviderPoolManager] Marked provider as healthy: 85ac5e51 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:28.877] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 6f89b8b2-fb35-42c8-8340-897d06162329
+[2026-05-24 05:15:28.878] [INFO] [Auth Token] Time until expiry: 00h 42m 32s
+[2026-05-24 05:15:28.878] [INFO] [Gemini] Checking expiry date | Expiry date: 1779591481436, Current time: 1779588928878, 20 minutes from now: 1779590128878, Is near expiry: false
+[2026-05-24 05:15:29.105] [INFO] [ProviderPoolManager] Flushing refresh buffer for gemini-cli-oauth. Processing 4 unique nodes.
+[2026-05-24 05:15:29.105] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ad6e780-9991-4668-8aec-1b2715a37b6c
+[2026-05-24 05:15:29.105] [INFO] [Gemini] Force refreshing token...
+[2026-05-24 05:15:29.106] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 5bd35a9c-fadc-4827-89a2-fa8f74d6d2f3
+[2026-05-24 05:15:29.106] [INFO] [Gemini] Force refreshing token...
+[2026-05-24 05:15:29.106] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: c9ff59d6-8b88-437e-974c-6a1098ce3d48
+[2026-05-24 05:15:29.106] [INFO] [Gemini] Force refreshing token...
+[2026-05-24 05:15:29.106] [INFO] [ProviderPoolManager] Flushing refresh buffer for gemini-antigravity. Processing 8 unique nodes.
+[2026-05-24 05:15:29.287] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:29.288] [INFO] [Gemini Auth] Token expiring soon or force refresh requested. Refreshing token...
+[2026-05-24 05:15:29.289] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:29.290] [INFO] [Gemini Auth] Token expiring soon or force refresh requested. Refreshing token...
+[2026-05-24 05:15:29.293] [INFO] [Gemini Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:29.293] [INFO] [Gemini Auth] Token expiring soon or force refresh requested. Refreshing token...
+[2026-05-24 05:15:29.340] [INFO] [Gemini Auth] Credentials saved to configs/gemini/application_default_credentials copy 11.json
+[2026-05-24 05:15:29.340] [INFO] [Gemini Auth] Token refreshed and saved successfully.
+[2026-05-24 05:15:29.341] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider 5bd35a9c (gemini-cli-oauth)
+[2026-05-24 05:15:29.341] [INFO] [ProviderPoolManager] Token refresh successful for node 5bd35a9c (Duration: 235ms)
+[2026-05-24 05:15:29.341] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 353eb2d2-b70e-4096-a6dd-241344e9cffc
+[2026-05-24 05:15:29.341] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592523663, Current time: 1779588929341, 20 minutes from now: 1779590129341, Is near expiry: false
+[2026-05-24 05:15:29.341] [INFO] [ProviderPoolManager] Token refresh no-op for node 353eb2d2 (Already valid)
+[2026-05-24 05:15:29.341] [INFO] [Gemini Auth] Credentials saved to configs/gemini/application_default_credentials copy 12.json
+[2026-05-24 05:15:29.341] [INFO] [Gemini Auth] Token refreshed and saved successfully.
+[2026-05-24 05:15:29.341] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider 2ad6e780 (gemini-cli-oauth)
+[2026-05-24 05:15:29.341] [INFO] [ProviderPoolManager] Token refresh successful for node 2ad6e780 (Duration: 236ms)
+[2026-05-24 05:15:29.342] [INFO] [Gemini Auth] Credentials saved to configs/gemini/application_default_credentials copy 10.json
+[2026-05-24 05:15:29.342] [INFO] [Gemini Auth] Token refreshed and saved successfully.
+[2026-05-24 05:15:29.342] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider c9ff59d6 (gemini-cli-oauth)
+[2026-05-24 05:15:29.342] [INFO] [ProviderPoolManager] Token refresh successful for node c9ff59d6 (Duration: 236ms)
+[2026-05-24 05:15:29.342] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-4-1779572136780 (252iliarl@gmail.com)
+[2026-05-24 05:15:29.342] [INFO] [Antigravity] Force refreshing token...
+[2026-05-24 05:15:29.343] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:29.343] [INFO] [Antigravity Auth] Token expiring soon or force refresh requested. Refreshing token...
+[2026-05-24 05:15:29.384] [INFO] [Antigravity Auth] Credentials saved to ./configs/antigravity/1779378343952_4_oauth_creds.json
+[2026-05-24 05:15:29.384] [INFO] [Antigravity Auth] Token refreshed and saved to ./configs/antigravity/1779378343952_4_oauth_creds.json successfully.
+[2026-05-24 05:15:29.384] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider 252iliarl@gmail.com (gemini-antigravity)
+[2026-05-24 05:15:29.384] [INFO] [ProviderPoolManager] Token refresh successful for node 252iliarl@gmail.com (Duration: 42ms)
+[2026-05-24 05:15:29.384] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-3-1779572136780 (alvarbtchmnnn@gmail.com)
+[2026-05-24 05:15:29.384] [INFO] [Antigravity] Force refreshing token...
+[2026-05-24 05:15:29.385] [INFO] [Antigravity Auth] Credentials loaded successfully from file.
+[2026-05-24 05:15:29.385] [INFO] [Antigravity Auth] Token expiring soon or force refresh requested. Refreshing token...
+[2026-05-24 05:15:29.459] [INFO] [Antigravity Auth] Credentials saved to ./configs/antigravity/1779378343952_3_oauth_creds.json
+[2026-05-24 05:15:29.459] [INFO] [Antigravity Auth] Token refreshed and saved to ./configs/antigravity/1779378343952_3_oauth_creds.json successfully.
+[2026-05-24 05:15:29.459] [INFO] [ProviderPoolManager] Reset refresh status and marked healthy for provider alvarbtchmnnn@gmail.com (gemini-antigravity)
+[2026-05-24 05:15:29.459] [INFO] [ProviderPoolManager] Token refresh successful for node alvarbtchmnnn@gmail.com (Duration: 75ms)
+[2026-05-24 05:15:30.717] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-cli-oauth, gemini-antigravity
+[2026-05-24 05:15:31.407] [INFO] [ProviderPoolManager] Marked provider as healthy: 6f89b8b2 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:31.408] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 353eb2d2-b70e-4096-a6dd-241344e9cffc
+[2026-05-24 05:15:31.408] [INFO] [Auth Token] Time until expiry: 00h 59m 52s
+[2026-05-24 05:15:31.408] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592523663, Current time: 1779588931408, 20 minutes from now: 1779590131408, Is near expiry: false
+[2026-05-24 05:15:31.777] [ERROR] [Gemini API] Error calling (Status: 429, Code: 429): Resource has been exhausted (e.g. check quota).
+[2026-05-24 05:15:31.778] [WARN] [ProviderPoolManager] [HealthCheck] gemini-cli-oauth failed after 1 attempts: Resource has been exhausted (e.g. check quota).
+[2026-05-24 05:15:31.778] [WARN] [ProviderPoolManager] Health check for 353eb2d2 (gemini-cli-oauth) failed: Resource has been exhausted (e.g. check quota).
+[2026-05-24 05:15:31.779] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: fec7f915-7248-4493-b734-b8b9dafe3498
+[2026-05-24 05:15:31.779] [INFO] [Auth Token] Time until expiry: 00h 43m 54s
+[2026-05-24 05:15:31.779] [INFO] [Gemini] Checking expiry date | Expiry date: 1779591565905, Current time: 1779588931779, 20 minutes from now: 1779590131779, Is near expiry: false
+[2026-05-24 05:15:32.425] [INFO] [ProviderPoolManager] Marked provider as healthy: fec7f915 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:32.425] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: eeffe156-9ca4-4305-b54e-40a73f281f2b
+[2026-05-24 05:15:32.426] [INFO] [Auth Token] Time until expiry: 00h 43m 53s
+[2026-05-24 05:15:32.426] [INFO] [Gemini] Checking expiry date | Expiry date: 1779591565907, Current time: 1779588932426, 20 minutes from now: 1779590132426, Is near expiry: false
+[2026-05-24 05:15:33.285] [INFO] [ProviderPoolManager] Marked provider as healthy: eeffe156 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:33.286] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 683f615e-3523-4bdb-ba70-92fc1f266e9a
+[2026-05-24 05:15:33.286] [INFO] [Auth Token] Time until expiry: 00h 44m 08s
+[2026-05-24 05:15:33.286] [INFO] [Gemini] Checking expiry date | Expiry date: 1779591581704, Current time: 1779588933286, 20 minutes from now: 1779590133286, Is near expiry: false
+[2026-05-24 05:15:34.342] [INFO] [ProviderPoolManager] Marked provider as healthy: 683f615e for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:34.343] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ce60d81-00ed-4fcc-8cc9-2b528a9f6c60
+[2026-05-24 05:15:34.343] [INFO] [Auth Token] Time until expiry: 00h 44m 07s
+[2026-05-24 05:15:34.343] [INFO] [Gemini] Checking expiry date | Expiry date: 1779591581700, Current time: 1779588934343, 20 minutes from now: 1779590134343, Is near expiry: false
+[2026-05-24 05:15:34.411] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-cli-oauth
+[2026-05-24 05:15:35.252] [INFO] [ProviderPoolManager] Marked provider as healthy: 2ce60d81 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:35.253] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 1a2f69ab-7876-4cb4-beaf-2d906513accd
+[2026-05-24 05:15:35.253] [INFO] [Auth Token] Time until expiry: 00h 44m 06s
+[2026-05-24 05:15:35.253] [INFO] [Gemini] Checking expiry date | Expiry date: 1779591581702, Current time: 1779588935253, 20 minutes from now: 1779590135253, Is near expiry: false
+[2026-05-24 05:15:37.082] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-cli-oauth
+[2026-05-24 05:15:37.567] [INFO] [ProviderPoolManager] Marked provider as healthy: 1a2f69ab for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:37.567] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: c9ff59d6-8b88-437e-974c-6a1098ce3d48
+[2026-05-24 05:15:37.567] [INFO] [Auth Token] Time until expiry: 00h 59m 50s
+[2026-05-24 05:15:37.567] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592528322, Current time: 1779588937567, 20 minutes from now: 1779590137567, Is near expiry: false
+[2026-05-24 05:15:39.375] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-cli-oauth
+[2026-05-24 05:15:39.481] [INFO] [ProviderPoolManager] Marked provider as healthy: c9ff59d6 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:39.482] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 5bd35a9c-fadc-4827-89a2-fa8f74d6d2f3
+[2026-05-24 05:15:39.482] [INFO] [Auth Token] Time until expiry: 00h 59m 48s
+[2026-05-24 05:15:39.482] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592528321, Current time: 1779588939482, 20 minutes from now: 1779590139482, Is near expiry: false
+[2026-05-24 05:15:40.291] [INFO] [ProviderPoolManager] Marked provider as healthy: 5bd35a9c for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:40.294] [INFO] [Adapter] getServiceAdapter, provider: gemini-cli-oauth, uuid: 2ad6e780-9991-4668-8aec-1b2715a37b6c
+[2026-05-24 05:15:40.295] [INFO] [Auth Token] Time until expiry: 00h 59m 48s
+[2026-05-24 05:15:40.296] [INFO] [Gemini] Checking expiry date | Expiry date: 1779592528322, Current time: 1779588940296, 20 minutes from now: 1779590140296, Is near expiry: false
+[2026-05-24 05:15:41.710] [INFO] [ProviderPoolManager] Marked provider as healthy: 2ad6e780 for type gemini-cli-oauth (usage count reset)
+[2026-05-24 05:15:41.710] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-0-1779572136780 (xxiliarlxx@gmail.com)
+[2026-05-24 05:15:41.718] [INFO] [Antigravity Auth Token] Time until expiry: 00h 59m 41s
+[2026-05-24 05:15:41.718] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592523681, Current time: 1779588941718, 20 minutes from now: 1779590141718, Is near expiry: false
+[2026-05-24 05:15:41.718] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:15:42.060] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 137h35m41s.
+[2026-05-24 05:15:42.060] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:15:42.114] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-cli-oauth
+[2026-05-24 05:15:42.310] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 137h35m41s.
+[2026-05-24 05:15:42.310] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:15:43.348] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-cli-oauth
+[2026-05-24 05:15:48.168] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project skillful-parser-sdhlr before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=skillful-parser-sdhlr then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:48.169] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:15:48.182] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-0-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:15:48.182] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (xxiliarlxx@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:16:48.182Z
+[2026-05-24 05:15:48.183] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project skillful-parser-sdhlr before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=skillful-parser-sdhlr then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:48.183] [WARN] [ProviderPoolManager] Health check for xxiliarlxx@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project skillful-parser-sdhlr before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=skillful-parser-sdhlr then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:48.184] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-1-1779572136780 (iliarl353@gmail.com)
+[2026-05-24 05:15:48.184] [INFO] [Antigravity Auth Token] Time until expiry: 00h 59m 35s
+[2026-05-24 05:15:48.185] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592523667, Current time: 1779588948185, 20 minutes from now: 1779590148185, Is near expiry: false
+[2026-05-24 05:15:48.185] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:15:48.460] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 127h55m40s.
+[2026-05-24 05:15:48.461] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:15:48.737] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 127h55m40s.
+[2026-05-24 05:15:48.739] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:15:49.929] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:15:51.343] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project reliable-treat-8t1dp before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=reliable-treat-8t1dp then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:51.345] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:15:51.347] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-1-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:15:51.347] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (iliarl353@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:16:51.347Z
+[2026-05-24 05:15:51.348] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project reliable-treat-8t1dp before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=reliable-treat-8t1dp then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:51.348] [WARN] [ProviderPoolManager] Health check for iliarl353@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project reliable-treat-8t1dp before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=reliable-treat-8t1dp then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:51.348] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-2-1779572136780 (ourneeds.inc@gmail.com)
+[2026-05-24 05:15:51.348] [INFO] [Antigravity Auth Token] Time until expiry: 00h 44m 13s
+[2026-05-24 05:15:51.352] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779591604692, Current time: 1779588951348, 20 minutes from now: 1779590151348, Is near expiry: false
+[2026-05-24 05:15:51.352] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:15:51.664] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 130h59m54s.
+[2026-05-24 05:15:51.665] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:15:51.979] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 130h59m54s.
+[2026-05-24 05:15:51.980] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:15:53.049] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:15:59.575] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project turing-element-387pw before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=turing-element-387pw then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:59.642] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:15:59.654] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-2-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:15:59.654] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (ourneeds.inc@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:16:59.654Z
+[2026-05-24 05:15:59.654] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project turing-element-387pw before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=turing-element-387pw then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:59.654] [WARN] [ProviderPoolManager] Health check for ourneeds.inc@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project turing-element-387pw before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=turing-element-387pw then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:15:59.682] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-3-1779572136780 (alvarbtchmnnn@gmail.com)
+[2026-05-24 05:15:59.690] [INFO] [Antigravity Auth Token] Time until expiry: 00h 59m 28s
+[2026-05-24 05:15:59.696] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592528419, Current time: 1779588959690, 20 minutes from now: 1779590159690, Is near expiry: false
+[2026-05-24 05:15:59.696] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:16:00.942] [INFO] [ProviderPoolManager] Marked provider as healthy: alvarbtchmnnn@gmail.com for type gemini-antigravity (usage count reset)
+[2026-05-24 05:16:02.392] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-4-1779572136780 (252iliarl@gmail.com)
+[2026-05-24 05:16:02.395] [INFO] [Antigravity Auth Token] Time until expiry: 00h 59m 25s
+[2026-05-24 05:16:02.395] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592528378, Current time: 1779588962395, 20 minutes from now: 1779590162395, Is near expiry: false
+[2026-05-24 05:16:02.395] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:16:03.005] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 1h10m44s.
+[2026-05-24 05:16:03.237] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:16:03.308] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:16:04.533] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 1h10m42s.
+[2026-05-24 05:16:04.820] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:16:06.263] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:16:22.767] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project substantial-zucchini-mll0l before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=substantial-zucchini-mll0l then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:16:23.075] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:16:23.093] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-4-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:16:23.146] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (252iliarl@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:17:23.142Z
+[2026-05-24 05:16:23.164] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project substantial-zucchini-mll0l before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=substantial-zucchini-mll0l then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:16:23.164] [WARN] [ProviderPoolManager] Health check for 252iliarl@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project substantial-zucchini-mll0l before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=substantial-zucchini-mll0l then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:16:23.227] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-5-1779572136780 (slots2472@gmail.com)
+[2026-05-24 05:16:23.255] [INFO] [Antigravity Auth Token] Time until expiry: 00h 07m 16s
+[2026-05-24 05:16:23.284] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779589419343, Current time: 1779588983255, 20 minutes from now: 1779590183255, Is near expiry: true
+[2026-05-24 05:16:23.284] [INFO] [Antigravity] Token is near expiry, marking credential auto-gemini-antigravity-5-1779572136780 for refresh
+[2026-05-24 05:16:23.407] [INFO] [ProviderPoolManager] Provider auto-gem is already in refresh queue, ignoring duplicate refresh request.
+[2026-05-24 05:16:23.408] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:16:25.309] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 108h51m23s.
+[2026-05-24 05:16:25.324] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:16:27.458] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:16:44.588] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 108h51m10s.
+[2026-05-24 05:16:44.737] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:17:42.267] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project orbital-phoenix-bhnws before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=orbital-phoenix-bhnws then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:17:42.396] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:17:42.404] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-5-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:17:42.407] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (slots2472@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:18:42.407Z
+[2026-05-24 05:17:42.416] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project orbital-phoenix-bhnws before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=orbital-phoenix-bhnws then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:17:42.416] [WARN] [ProviderPoolManager] Health check for slots2472@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project orbital-phoenix-bhnws before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=orbital-phoenix-bhnws then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:17:42.445] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-6-1779572136780 (rightatyourdoor33@gmail.com)
+[2026-05-24 05:17:42.451] [INFO] [Antigravity Auth Token] Time until expiry: 00h 57m 41s
+[2026-05-24 05:17:42.473] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592523677, Current time: 1779589062459, 20 minutes from now: 1779590262459, Is near expiry: false
+[2026-05-24 05:17:42.473] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:17:46.169] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:18:18.297] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 84h20m42s.
+[2026-05-24 05:18:18.357] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:18:19.641] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 84h20m38s.
+[2026-05-24 05:18:19.688] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:18:27.708] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project loyal-mercury-d39xn before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=loyal-mercury-d39xn then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:18:27.783] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:18:27.783] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-6-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:18:27.791] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (rightatyourdoor33@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:19:27.791Z
+[2026-05-24 05:18:27.800] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project loyal-mercury-d39xn before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=loyal-mercury-d39xn then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:18:27.800] [WARN] [ProviderPoolManager] Health check for rightatyourdoor33@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project loyal-mercury-d39xn before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=loyal-mercury-d39xn then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:18:27.816] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-7-1779572136780 (rlmusic05@gmail.com)
+[2026-05-24 05:18:27.822] [INFO] [Antigravity Auth Token] Time until expiry: 00h 40m 58s
+[2026-05-24 05:18:27.823] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779591565916, Current time: 1779589107822, 20 minutes from now: 1779590307822, Is near expiry: false
+[2026-05-24 05:18:27.826] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:18:30.841] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:18:31.309] [INFO] [ProviderPoolManager] Marked provider as healthy: rlmusic05@gmail.com for type gemini-antigravity (usage count reset)
+[2026-05-24 05:18:31.319] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-8-1779572136780 (izzyrlmusic@gmail.com)
+[2026-05-24 05:18:31.319] [INFO] [Antigravity Auth Token] Time until expiry: 00h 41m 33s
+[2026-05-24 05:18:31.333] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779591604665, Current time: 1779589111319, 20 minutes from now: 1779590311319, Is near expiry: false
+[2026-05-24 05:18:31.333] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:18:32.517] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 77h56m21s.
+[2026-05-24 05:18:34.023] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:18:34.038] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:18:34.650] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 77h56m19s.
+[2026-05-24 05:18:34.652] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:18:49.929] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project hypnagogic-outpost-qbcbf before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=hypnagogic-outpost-qbcbf then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:18:50.038] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:18:50.058] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-8-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:18:50.093] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (izzyrlmusic@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:19:50.079Z
+[2026-05-24 05:18:50.094] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project hypnagogic-outpost-qbcbf before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=hypnagogic-outpost-qbcbf then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:18:50.094] [WARN] [ProviderPoolManager] Health check for izzyrlmusic@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project hypnagogic-outpost-qbcbf before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=hypnagogic-outpost-qbcbf then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:18:50.109] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-9-1779572136780 (u3804759745@gmail.com)
+[2026-05-24 05:18:50.109] [INFO] [Antigravity Auth Token] Time until expiry: 00h 40m 35s
+[2026-05-24 05:18:50.125] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779591565908, Current time: 1779589130109, 20 minutes from now: 1779590330109, Is near expiry: false
+[2026-05-24 05:18:50.126] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:18:53.035] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:18:54.229] [INFO] [ProviderPoolManager] Marked provider as healthy: u3804759745@gmail.com for type gemini-antigravity (usage count reset)
+[2026-05-24 05:18:54.230] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-10-1779572136780 (bagginsb577@gmail.com)
+[2026-05-24 05:18:54.230] [INFO] [Antigravity Auth Token] Time until expiry: 00h 56m 29s
+[2026-05-24 05:18:54.230] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592523683, Current time: 1779589134230, 20 minutes from now: 1779590334230, Is near expiry: false
+[2026-05-24 05:18:54.230] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:18:54.481] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 84h20m10s.
+[2026-05-24 05:18:54.482] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:18:54.892] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 84h20m10s.
+[2026-05-24 05:18:54.893] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:18:57.003] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:19:01.361] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project dauntless-tracker-k3tp7 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=dauntless-tracker-k3tp7 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:19:01.405] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:19:01.411] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-10-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:19:01.412] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (bagginsb577@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:20:01.412Z
+[2026-05-24 05:19:01.418] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project dauntless-tracker-k3tp7 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=dauntless-tracker-k3tp7 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:19:01.418] [WARN] [ProviderPoolManager] Health check for bagginsb577@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project dauntless-tracker-k3tp7 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=dauntless-tracker-k3tp7 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:19:01.421] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-11-1779572136780 (leenakata88@gmail.com)
+[2026-05-24 05:19:01.421] [INFO] [Antigravity Auth Token] Time until expiry: 00h 56m 22s
+[2026-05-24 05:19:01.421] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779592523672, Current time: 1779589141421, 20 minutes from now: 1779590341421, Is near expiry: false
+[2026-05-24 05:19:01.422] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:19:03.908] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:19:11.173] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 77h55m41s.
+[2026-05-24 05:19:11.176] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:19:11.590] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 77h55m40s.
+[2026-05-24 05:19:11.591] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:19:25.926] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project tactical-botany-93rhq before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=tactical-botany-93rhq then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:19:25.998] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:19:26.022] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-11-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:19:26.076] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (leenakata88@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:20:26.035Z
+[2026-05-24 05:19:26.119] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project tactical-botany-93rhq before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=tactical-botany-93rhq then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:19:26.138] [WARN] [ProviderPoolManager] Health check for leenakata88@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project tactical-botany-93rhq before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=tactical-botany-93rhq then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:19:27.517] [INFO] [Adapter] getServiceAdapter, provider: gemini-antigravity, uuid: auto-gemini-antigravity-12-1779572136780 (j34114095@gmail.com)
+[2026-05-24 05:19:28.799] [INFO] [Antigravity Auth Token] Time until expiry: 00h 42m 40s
+[2026-05-24 05:19:29.490] [INFO] [Antigravity] Checking expiry date | Expiry date: 1779591729360, Current time: 1779589169401, 20 minutes from now: 1779590369401, Is near expiry: false
+[2026-05-24 05:19:29.781] [INFO] [Antigravity] Selected model: gemini-3-flash
+DEBUG PAYLOAD REQUEST KEYS:  [ 'contents', 'sessionId' ]
+[2026-05-24 05:19:42.976] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 77h55m10s.
+[2026-05-24 05:19:43.076] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.sandbox.googleapis.com. Trying next base URL...
+[2026-05-24 05:19:43.122] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity
+[2026-05-24 05:19:43.646] [ERROR] [Antigravity API] Error calling (Status: 429, Code: 429): Individual quota reached. Contact your administrator to enable overages. Resets in 77h55m9s.
+[2026-05-24 05:19:43.649] [INFO] [Antigravity API] Rate limited on https://daily-cloudcode-pa.googleapis.com. Trying next base URL...
+[2026-05-24 05:20:01.207] [ERROR] [Antigravity API] Error calling (Status: 403, Code: 403): Gemini for Google Cloud API (Staging) has not been used in project polar-relic-6frtp before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=polar-relic-6frtp then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:20:01.313] [INFO] [Antigravity API] Received 403. Triggering credential switch via PoolManager...
+[2026-05-24 05:20:01.317] [INFO] [Antigravity] Per-account cooldown for auto-gemini-antigravity-12-1779572136780 on model gemini-3-flash (403, not account-fatal, 60000ms)
+[2026-05-24 05:20:01.336] [WARN] [ProviderPoolManager] [Account Model Cooldown] gemini-antigravity (j34114095@gmail.com) :: gemini-3-flash cooled down until 2026-05-24T02:21:01.330Z
+[2026-05-24 05:20:01.340] [WARN] [ProviderPoolManager] [HealthCheck] gemini-antigravity failed after 1 attempts: Gemini for Google Cloud API (Staging) has not been used in project polar-relic-6frtp before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=polar-relic-6frtp then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:20:01.347] [WARN] [ProviderPoolManager] Health check for j34114095@gmail.com (gemini-antigravity) failed: Gemini for Google Cloud API (Staging) has not been used in project polar-relic-6frtp before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/staging-cloudaicompanion.sandbox.googleapis.com/overview?project=polar-relic-6frtp then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+[2026-05-24 05:20:03.543] [INFO] [ProviderPoolManager] provider_pools.json updated for: gemini-antigravity

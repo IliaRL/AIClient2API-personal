@@ -1,76 +1,89 @@
 #!/bin/bash
 # scripts/safe-restart.sh
-# Atomic restart for AIClient2API on port 3000
+# Atomic restart for AIClient2API (3000) and LiteLLM (4000)
 
 PORT=3000
 MASTER_PORT=3100
+LITELLM_PORT=4000
 LOG_FILE="/tmp/aiclient.log"
+LITELLM_LOG="/tmp/litellm.log"
 
-echo "Stopping existing proxy on port $PORT..."
-# Find the actual listening process, not the established connections.
-# Using -iTCP:$PORT -sTCP:LISTEN avoids killing the parent Claude process,
-# and only checking LISTEN avoids confusion with lingering CLOSE_WAIT/TIME_WAIT.
-PID=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)
-if [ ! -z "$PID" ]; then
-    echo "Found listening PID: $PID. Killing..."
-    kill $PID 2>/dev/null
-    # Wait up to 8 seconds for the LISTEN socket to go away.
-    for i in $(seq 1 16); do
-        if [ -z "$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)" ]; then
-            break
+kill_listening_port() {
+    local target_port=$1
+    local name=$2
+    echo "Stopping existing $name on port $target_port..."
+    # Find the actual listening process, not the established connections.
+    # Using -iTCP:$PORT -sTCP:LISTEN avoids killing the parent Claude process.
+    local PID=$(lsof -nP -iTCP:$target_port -sTCP:LISTEN -t 2>/dev/null)
+    if [ ! -z "$PID" ]; then
+        echo "Found listening PID for $name: $PID. Killing..."
+        kill $PID 2>/dev/null
+        for i in $(seq 1 16); do
+            if [ -z "$(lsof -nP -iTCP:$target_port -sTCP:LISTEN -t 2>/dev/null)" ]; then
+                break
+            fi
+            sleep 0.5
+        done
+        local REMAIN=$(lsof -nP -iTCP:$target_port -sTCP:LISTEN -t 2>/dev/null)
+        if [ ! -z "$REMAIN" ]; then
+            echo "Process $REMAIN still listening on $target_port, sending SIGKILL..."
+            kill -9 $REMAIN 2>/dev/null
+            sleep 1
         fi
-        sleep 0.5
-    done
-    # If still listening, escalate to SIGKILL.
-    REMAIN=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)
-    if [ ! -z "$REMAIN" ]; then
-        echo "Process $REMAIN still listening, sending SIGKILL..."
-        kill -9 $REMAIN 2>/dev/null
-        sleep 1
     fi
-fi
+}
 
-if [ ! -z "$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)" ]; then
-    echo "Error: Port $PORT is still being listened on after kill."
+kill_listening_port $PORT "AIClient2API Proxy"
+kill_listening_port $MASTER_PORT "AIClient2API Master"
+kill_listening_port $LITELLM_PORT "LiteLLM Gateway"
+
+if [ ! -z "$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)" ] || [ ! -z "$(lsof -nP -iTCP:$LITELLM_PORT -sTCP:LISTEN -t 2>/dev/null)" ]; then
+    echo "Error: Ports are still being listened on after kill."
     exit 1
 fi
 
-# Also clear any orphaned master process on the management port (3100).
-# safe-restart.sh kills port 3000 only — a stale master.js can survive and
-# block the new process from binding port 3100, causing a fatal crash.
-MASTER_PID=$(lsof -nP -iTCP:$MASTER_PORT -sTCP:LISTEN -t 2>/dev/null)
-if [ ! -z "$MASTER_PID" ]; then
-    echo "Clearing orphaned master process on port $MASTER_PORT (PID $MASTER_PID)..."
-    kill $MASTER_PID 2>/dev/null
-    sleep 1
-    MASTER_REMAIN=$(lsof -nP -iTCP:$MASTER_PORT -sTCP:LISTEN -t 2>/dev/null)
-    if [ ! -z "$MASTER_REMAIN" ]; then
-        kill -9 $MASTER_REMAIN 2>/dev/null
-        sleep 0.5
-    fi
-fi
-
 # Rotate log if it exceeds 10MB to prevent I/O contention
-if [ -f "$LOG_FILE" ]; then
-    LOG_SIZE=$(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
-    if [ "$LOG_SIZE" -gt 10485760 ]; then
-        echo "Rotating large log file (${LOG_SIZE} bytes)..."
-        mv "$LOG_FILE" "${LOG_FILE}.old"
+for lf in "$LOG_FILE" "$LITELLM_LOG"; do
+    if [ -f "$lf" ]; then
+        LOG_SIZE=$(stat -f%z "$lf" 2>/dev/null || echo 0)
+        if [ "$LOG_SIZE" -gt 10485760 ]; then
+            echo "Rotating large log file $lf..."
+            mv "$lf" "${lf}.old"
+        fi
     fi
-fi
+done
 
-echo "Starting proxy..."
-npm start > $LOG_FILE 2>&1 &
+echo "Starting LiteLLM Gateway..."
+cd /Users/ilialiston/LiteLLM-Gateway && nohup venv/bin/litellm --config litellm_config.yaml --port $LITELLM_PORT > $LITELLM_LOG 2>&1 &
 
-echo "Waiting for proxy to be ready..."
+echo "Starting AIClient2API Proxy..."
+cd /Users/ilialiston/AIClient2API && nohup npm start > $LOG_FILE 2>&1 &
+
+echo "Waiting for services to be ready..."
+PROXY_READY=0
+LITELLM_READY=0
+
 for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:$PORT/api/help -o /dev/null; then
-        echo "Proxy is ready!"
+    if [ $PROXY_READY -eq 0 ] && curl -sf http://127.0.0.1:$PORT/api/help -o /dev/null; then
+        echo "AIClient2API Proxy is ready!"
+        PROXY_READY=1
+    fi
+    
+    # Use netcat to check if the port is open instead of curling /health, 
+    # because LiteLLM enforces auth on /health and returns 401.
+    if [ $LITELLM_READY -eq 0 ] && nc -z 127.0.0.1 $LITELLM_PORT 2>/dev/null; then
+        echo "LiteLLM Gateway is ready!"
+        LITELLM_READY=1
+    fi
+    
+    if [ $PROXY_READY -eq 1 ] && [ $LITELLM_READY -eq 1 ]; then
+        echo "Both services are securely restarted and ready!"
         exit 0
     fi
     sleep 0.5
 done
 
-echo "Error: Proxy failed to start within 15 seconds."
-tail -n 30 $LOG_FILE
+echo "Error: Services failed to start within 15 seconds."
+tail -n 15 $LOG_FILE
+tail -n 15 $LITELLM_LOG
 exit 1

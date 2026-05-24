@@ -20,14 +20,7 @@ import {
     getRateLimitCooldownRecoveryTime,
 } from './network-utils.js';
 import { logConversation, FETCH_SYSTEM_PROMPT_FILE, INPUT_SYSTEM_PROMPT_FILE } from './logging-utils.js';
-import {
-    getProtocolPrefix,
-    ENDPOINT_TYPE,
-    resolveCustomModelRouting,
-    extractResponseText,
-    extractPromptText,
-    extractSystemPromptFromRequestBody,
-} from './model-utils.js';
+import { getProtocolPrefix, ENDPOINT_TYPE, resolveCustomModelRouting, extractResponseText, extractPromptText, extractSystemPromptFromRequestBody } from './model-utils.js';
 import {
     usesManagedModelList,
     getConfiguredSupportedModels,
@@ -53,7 +46,7 @@ function _getTrace(CONFIG) {
  * 获取指定提供商类型下，所有节点配置的已选模型列表（去重聚合）
  */
 function getConfiguredSupportedModelsFromPool(providerPoolManager, providerType) {
-    if (!providerPoolManager?.providerStatus?.[providerType]) {
+    if (!providerPoolManager?.providerStatus || !Object.hasOwn(providerPoolManager.providerStatus, providerType)) {
         return [];
     }
 
@@ -295,14 +288,24 @@ function _applyCustomModelParameters(requestBody, customConfig, provider) {
  * Updates a temporary file with the ID of the last model used.
  * Used for accurate shell statusline reporting.
  */
-export async function updateLastModelFile(model) {
+export async function updateLastModelFile(model, provider = null, customName = null, requestedModel = null) {
     try {
         // Strip OpenRouter-style variant suffixes like :free, :nitro, :beta
         // e.g. "openai/gpt-oss-120b:free" -> "openai/gpt-oss-120b"
         const baseModelId = model.replace(/:[^/]+$/, '');
         const maxOutput = MODEL_MAX_OUTPUT_TOKENS[model] ?? MODEL_MAX_OUTPUT_TOKENS[baseModelId] ?? GEMINI_DEFAULT_MAX_TOKENS;
         const contextWindow = MODEL_CONTEXT_WINDOWS[model] ?? MODEL_CONTEXT_WINDOWS[baseModelId] ?? 200000;
-        await fs.writeFile('/tmp/aiclient_last_model', JSON.stringify({ model, maxOutput, contextWindow }));
+        const payload = JSON.stringify({
+            model,
+            maxOutput,
+            contextWindow,
+            provider: provider || null,
+            customName: customName || null,
+            requestedModel: requestedModel || null,
+        });
+        const tmpPath = '/tmp/aiclient_last_model.tmp';
+        await fs.writeFile(tmpPath, payload);
+        await fs.rename(tmpPath, '/tmp/aiclient_last_model');
     } catch (err) {
         // Silently ignore errors
     }
@@ -546,7 +549,7 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                 uuid: pooluuid
             });
             // Update last model file for statusline accuracy
-            updateLastModelFile(model);
+            updateLastModelFile(model, toProvider, customName, retryContext?.originalModel || null);
         }
         // Record total upstream time on success.
         if (_trace) {
@@ -629,6 +632,10 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                         credentialMarkedUnhealthy = true;
                     }
                 }
+            } else if (status === 403 || status === 429) {
+                logger.info(`[Provider Pool] Marking ${toProvider} as permanently unhealthy due to ${status} error`);
+                providerPoolManager.markProviderUnhealthyImmediately(toProvider, { uuid: pooluuid }, error.message);
+                credentialMarkedUnhealthy = true;
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to stream error (status: ${status || 'unknown'})`);
                 // 如果是号池模式，并且请求处理失败，则标记当前使用的提供者为不健康
@@ -855,7 +862,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                 uuid: pooluuid
             });
             // Update last model file for statusline accuracy
-            updateLastModelFile(model);
+            updateLastModelFile(model, toProvider, customName, retryContext?.originalModel || null);
         }
     } catch (error) {
         logger.error('\n[Server] Error during unary processing:', error.stack);
@@ -889,6 +896,10 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
             } else if ((error.response?.status === 404 || status === 404) && model) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 404 — applying model cooldown for ${model}`);
                 providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model);
+                credentialMarkedUnhealthy = true;
+            } else if (status === 403 || status === 429) {
+                logger.info(`[Provider Pool] Marking ${toProvider} as permanently unhealthy due to ${status} error`);
+                providerPoolManager.markProviderUnhealthyImmediately(toProvider, { uuid: pooluuid }, error.message);
                 credentialMarkedUnhealthy = true;
             } else {
                 logger.info(`[Provider Pool] Marking ${toProvider} as unhealthy due to unary error (status: ${status || 'unknown'})`);
@@ -1166,6 +1177,7 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
 
     // 2. Extract model and determine if the request is for streaming.
     let { model, isStream } = _extractModelAndStreamInfo(req, originalRequestBody, fromProvider);
+    CONFIG.originalRequestedModel = model;
 
     if (!model) {
         throw new Error("Could not determine the model from the request.");
@@ -1240,6 +1252,7 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         processedRequestBody._requestBaseUrl = CONFIG.requestBaseUrl;
     }
 
+    console.log('[DEBUG-CONV-CHECK] fromProvider:', fromProvider, 'toProvider:', toProvider, 'fromProtocol:', getProtocolPrefix(fromProvider), 'toProtocol:', getProtocolPrefix(toProvider));
     if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider)) {
         logger.info(`[Request Convert] Converting request from ${fromProvider} to ${toProvider}`);
         const preConvertBody = processedRequestBody;
@@ -1303,7 +1316,8 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         CONFIG,
         currentRetry: 0,
         maxRetries: credentialSwitchMaxRetries,
-        isFallback: isFallbackUsed
+        isFallback: isFallbackUsed,
+        originalRequestBody: originalRequestBody
     };
 
     if (isStream) {

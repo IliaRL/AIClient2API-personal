@@ -33,6 +33,11 @@ function initEventStream() {
         addLogEntry(data);
     });
 
+    newEventSource.addEventListener('log_batch', (event) => {
+        const entries = JSON.parse(event.data);
+        entries.forEach(addLogEntry);
+    });
+
     newEventSource.addEventListener('provider', (event) => {
         const data = JSON.parse(event.data);
         updateProviderStatus(data);
@@ -72,11 +77,23 @@ function addLogEntry(logData) {
     const timeStr = date.toLocaleTimeString();
     const levelClass = `log-level-${logData.level}`;
 
-    logEntry.innerHTML = `
-        <span class="log-time">[${timeStr}]</span>
-        <span class="${levelClass}">[${logData.level.toUpperCase()}]</span>
-        <span class="log-message">${escapeHtml(logData.message)}</span>
-    `;
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'log-time';
+    timeSpan.textContent = `[${timeStr}]`;
+
+    const levelSpan = document.createElement('span');
+    levelSpan.className = levelClass;
+    levelSpan.textContent = `[${logData.level.toUpperCase()}]`;
+
+    const messageSpan = document.createElement('span');
+    messageSpan.className = 'log-message';
+    messageSpan.textContent = logData.message;
+
+    logEntry.appendChild(timeSpan);
+    logEntry.appendChild(document.createTextNode(' '));
+    logEntry.appendChild(levelSpan);
+    logEntry.appendChild(document.createTextNode(' '));
+    logEntry.appendChild(messageSpan);
 
     elements.logsContainer.appendChild(logEntry);
 
@@ -99,11 +116,23 @@ function updateServerStatus(connected) {
     if (connected) {
         statusBadge.classList.remove('error');
         icon.style.color = 'var(--success-color)';
-        statusBadge.innerHTML = `<i class="fas fa-circle"></i> <span data-i18n="header.status.connected">${t('header.status.connected')}</span>`;
+        const textSpan = document.createElement('span');
+        textSpan.setAttribute('data-i18n', 'header.status.connected');
+        textSpan.textContent = t('header.status.connected');
+        statusBadge.textContent = '';
+        statusBadge.appendChild(icon);
+        statusBadge.appendChild(document.createTextNode(' '));
+        statusBadge.appendChild(textSpan);
     } else {
         statusBadge.classList.add('error');
         icon.style.color = 'var(--danger-color)';
-        statusBadge.innerHTML = `<i class="fas fa-circle"></i> <span data-i18n="header.status.disconnected">${t('header.status.disconnected')}</span>`;
+        const textSpan = document.createElement('span');
+        textSpan.setAttribute('data-i18n', 'header.status.disconnected');
+        textSpan.textContent = t('header.status.disconnected');
+        statusBadge.textContent = '';
+        statusBadge.appendChild(icon);
+        statusBadge.appendChild(document.createTextNode(' '));
+        statusBadge.appendChild(textSpan);
     }
 }
 

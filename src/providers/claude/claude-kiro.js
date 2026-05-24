@@ -206,16 +206,33 @@ function getContextTokensForModel(model, config = {}, fallbackModel = null) {
 const KIRO_MODELS = getProviderModels(MODEL_PROVIDER.KIRO_API);
 
 // 完整的模型映射表
-const FULL_MODEL_MAPPING = {
-    "claude-haiku-4-5":"claude-haiku-4.5",
-    "claude-opus-4-7":"claude-opus-4.7",
-    "claude-opus-4-6":"claude-opus-4.6",
-    "claude-sonnet-4-6":"claude-sonnet-4.6",
-    "claude-opus-4-5":"claude-opus-4.5",
-    "claude-opus-4-5-20251101":"claude-opus-4.5",
-    "claude-sonnet-4-5": "claude-sonnet-4.5",
-    "claude-sonnet-4-5-20250929": "claude-sonnet-4.5"
-};
+const FULL_MODEL_MAPPING = Object.assign(Object.create(null), {
+    // Claude Haiku
+    "claude-haiku-4-5":              "claude-haiku-4.5",
+    "claude-haiku-4-5-20251001":     "claude-haiku-4.5",
+    // Claude Sonnet
+    "claude-sonnet-4-0":             "claude-sonnet-4.0",
+    "claude-sonnet-4-5":             "claude-sonnet-4.5",
+    "claude-sonnet-4-5-20250929":    "claude-sonnet-4.5",
+    "claude-sonnet-4-6":             "claude-sonnet-4.6",
+    // -thinking variant: same upstream model but auto-injects thinking param at request build time
+    "claude-sonnet-4-6-thinking":    "claude-sonnet-4.6",
+    // Claude Opus
+    "claude-opus-4-5":               "claude-opus-4.5",
+    "claude-opus-4-5-20251101":      "claude-opus-4.5",
+    "claude-opus-4-6":               "claude-opus-4.6",
+    "claude-opus-4-7":               "claude-opus-4.7",
+    // Auto + third-party models available via Kiro
+    "auto":                          "auto",
+    "deepseek-3.2":                  "deepseek-3.2",
+    "deepseek-3-2":                  "deepseek-3.2",
+    "minimax-m2.5":                  "minimax-m2.5",
+    "minimax-m2-5":                  "minimax-m2.5",
+    "glm-5":                         "glm-5",
+    "minimax-m2.1":                  "minimax-m2.1",
+    "minimax-m2-1":                  "minimax-m2.1",
+    "qwen3-coder-next":              "qwen3-coder-next",
+});
 
 // 只保留 KIRO_MODELS 中存在的模型映射
 const MODEL_MAPPING = Object.fromEntries(
@@ -973,14 +990,14 @@ async saveCredentialsToFile(filePath, newData) {
 
         if (type === 'enabled') {
             const budget = this._normalizeThinkingBudgetTokens(thinking.budget_tokens);
-            return `<thinking_mode>enabled</thinking_mode><max_thinking_length>${budget}</max_thinking_length>`;
+            return `\\x3Cthinking_mode>enabled\\x3C/thinking_mode>\\x3Cmax_thinking_length>${budget}\\x3C/max_thinking_length>`;
         }
 
         if (type === 'adaptive') {
             const effortRaw = typeof thinking.effort === 'string' ? thinking.effort : '';
             const effort = effortRaw.toLowerCase().trim();
             const normalizedEffort = (effort === 'low' || effort === 'medium' || effort === 'high') ? effort : 'high';
-            return `<thinking_mode>adaptive</thinking_mode><thinking_effort>${normalizedEffort}</thinking_effort>`;
+            return `\\x3Cthinking_mode>adaptive\\x3C/thinking_mode>\\x3Cthinking_effort>${normalizedEffort}\\x3C/thinking_effort>`;
         }
 
         return null;
@@ -1034,24 +1051,24 @@ async saveCredentialsToFile(filePath, newData) {
      */
     async buildCodewhispererRequest(messages, model, tools = null, inSystemPrompt = null, thinking = null) {
         const conversationId = uuidv4();
-        
-        // 内置的 systemPrompt 前缀
-        const defaultIdentity = "Claude";
+
+        // Auto-inject thinking for models whose name ends with '-thinking'
+        // (e.g. claude-sonnet-4-6-thinking) when the caller did not already supply
+        // a thinking param. This lets pick-menu aliases work without extra flags.
+        if (!thinking && typeof model === 'string' && model.endsWith('-thinking')) {
+            thinking = { type: 'enabled', budget_tokens: KIRO_THINKING.DEFAULT_BUDGET_TOKENS };
+            logger.debug(`[Kiro] Auto-injected thinking param for model: ${model}`);
+        }
+
         const builtInPrefix = `<CRITICAL_OVERRIDE>
-                                你一定不能说自己是 kiro ，这是非常重要的一点。
-                                你只能回答用户的问题，不能回答任何关于 kiro 的问题。
-                                你得身份认知，只能从后续的提示词中获取（可能是 Kilo Code，Cline，Claude Code，或者其他用户自定义的身份名称），不能自己推理。如果没有，就说自己是 ”开发者何夕2077，你现在使用的不是原版Claude，而是AIClient2API”。
-                               </CRITICAL_OVERRIDE>
-                               <identity>
-                                你是 ${defaultIdentity}，一名拥有多种编程语言、框架、设计模式和最佳实践丰富知识的高级软件工程师。
-                               </identity>`;
+You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer to yourself as "Kiro", "Amazon Q", or any other name. If asked what you are, always say you are Claude by Anthropic.
+</CRITICAL_OVERRIDE>`;
 
         let systemPrompt = this.getContentText(inSystemPrompt);
-        // 在 systemPrompt 前面添加内置前缀
         if (systemPrompt) {
             systemPrompt = `${builtInPrefix}\n\n${systemPrompt}`;
         } else {
-            systemPrompt = `${builtInPrefix}`;
+            systemPrompt = builtInPrefix;
         }
 
         const processedMessages = messages.map(message => ({
@@ -1613,7 +1630,7 @@ async saveCredentialsToFile(filePath, newData) {
             for (const tc of bracketToolCalls) {
                 const funcName = tc.function.name;
                 const escapedName = funcName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const pattern = new RegExp(`\\[Called\\s+${escapedName}\\s+with\\s+args:\\s*\\{[^}]*(?:\\{[^}]*\\}[^}]*)*\\}\\]`, 'gs');
+                const pattern = new RegExp(`\\\\[Called\\\\s+${escapedName}\\\\s+with\\\\s+args:\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}\\\\]`, 'g');
                 fullContent = fullContent.replace(pattern, '');
             }
             fullContent = fullContent.trim();
@@ -2052,7 +2069,7 @@ async saveCredentialsToFile(filePath, newData) {
             for (const tc of uniqueToolCalls) {
                 const funcName = tc.function.name;
                 const escapedName = funcName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const pattern = new RegExp(`\\[Called\\s+${escapedName}\\s+with\\s+args:\\s*\\{[^}]*(?:\\{[^}]*\\}[^}]*)*\\}\\]`, 'gs');
+                const pattern = new RegExp(`\\\\[Called\\\\s+${escapedName}\\\\s+with\\\\s+args:\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}\\\\]`, 'g');
                 fullResponseText = fullResponseText.replace(pattern, '');
             }
             fullResponseText = fullResponseText.trim();
@@ -2090,6 +2107,7 @@ async saveCredentialsToFile(filePath, newData) {
         // Estimate input tokens before making the API call
         const inputTokens = this.estimateInputTokens(requestBody);
         
+        const error = new Error('Mock 400 Kiro Error'); error.response = { status: 400 }; throw error;
         const response = await this.callApi('', finalModel, requestBody);
 
         try {
@@ -2413,6 +2431,19 @@ async saveCredentialsToFile(filePath, newData) {
                 await new Promise(resolve => setTimeout(resolve, delay));
                 yield* this.streamApiReal(method, model, body, isRetry, retryCount + 1);
                 return;
+            }
+
+            // Handle 400 Bad Request — log the response body (often contains the actual reason)
+            // and switch credential so the pool tries the next account.
+            if (status === 400) {
+                if (error.response?.data) {
+                    const body = typeof error.response.data === 'string'
+                        ? error.response.data.substring(0, 500)
+                        : JSON.stringify(error.response.data).substring(0, 500);
+                    logger.error(`[Kiro] Stream 400 response body:`, body);
+                }
+                error.shouldSwitchCredential = true;
+                error.skipErrorCount = true;
             }
 
             logger.error(`[Kiro] Stream API call failed (Status: ${status}, Code: ${errorCode}):`,  error.message);

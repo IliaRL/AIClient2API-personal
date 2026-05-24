@@ -32,10 +32,10 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 ---
 
-## Current Verified Baseline (2026-05-21)
+## Current Verified Baseline (2026-05-22)
 
-- **39 models across 7 providers** — all verified live
-- **30 pool accounts** (removed 3 dead Antigravity staging-403 accounts)
+- **80 models across 10 active providers** — all verified live
+- **34 pool accounts** (14 gemini-cli-oauth + 13 gemini-antigravity + 3 claude-kiro-oauth + 1 each: nvidia-nim, github-models, openai-codex-oauth, openai-custom)
 - **Cockpit quota routing (2026-05-20)**: `src/utils/cockpit-quota.js` — singleton polls `http://127.0.0.1:18081/report` every 10 min; injects `(100 - remaining%) × 1e9` penalty into `_calculateNodeScore()` per account+model. File fallback to `~/.antigravity_cockpit/accounts/`. Accounts at 0% quota sink to bottom of sort order; never removed.
 - **Warmup sort optimization (2026-05-20)**: Precomputes `minSeqInPool` and `now` once before the warmup sort loop instead of O(n) re-scan per comparison.
 - **Staging-API fix 2026-05-19e**: 403 "Gemini for Google Cloud API (Staging) has not been used in project" applies 24h per-account model cooldown instead of marking account dead.
@@ -52,13 +52,15 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 | Provider | Count | Models |
 |---|---|---|
-| `claude-kiro-oauth` | 6 | claude-haiku-4-5, claude-sonnet-4-5, claude-sonnet-4-5-20250929, claude-opus-4-5, claude-opus-4-6, claude-opus-4-7 |
-| `gemini-antigravity` | 5 | gemini-3-flash, gemini-3.1-pro-high, gemini-3.1-pro-low, gemini-claude-sonnet-4-6, gemini-claude-opus-4-6-thinking |
-| `gemini-cli-oauth` | 6 | gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview |
-| `github-models` | 6 | gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, DeepSeek-R1 |
+| `claude-kiro-oauth` | 7 | claude-haiku-4-5, claude-sonnet-4-5, claude-sonnet-4-5-20250929, claude-sonnet-4-6, claude-opus-4-5, claude-opus-4-6, claude-opus-4-7 |
+| `gemini-antigravity` | 10 | gemini-3-flash, gemini-3.1-pro-high, gemini-3.1-pro-low, gemini-3.5-flash-low, gemini-3.5-flash-high, gemini-claude-sonnet-4-6, gemini-claude-opus-4-6-thinking, gemini-3.1-flash-image, gemini-3-flash-agent, gemini-2.5-flash-thinking |
+| `gemini-cli-oauth` | 7 | gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.1-flash-lite-preview, gemini-3.1-pro-preview, gemini-3.5-flash |
+| `github-models` | 10 | gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, DeepSeek-R1, DeepSeek-V3-0324, Meta-Llama-3.1-405B-Instruct, Meta-Llama-3.1-8B-Instruct, Phi-4 |
 | `nvidia-nim` | 7 | meta/llama-3.3-70b-instruct, meta/llama-4-maverick-17b-128e-instruct, mistralai/mistral-small-4-119b-2603, moonshotai/kimi-k2.6, nvidia/llama-3.3-nemotron-super-49b-v1, nvidia/llama-3.3-nemotron-super-49b-v1.5, openai/gpt-oss-120b |
 | `openai-codex-oauth` | 5 | gpt-5.2, gpt-5.3-codex, gpt-5.4, gpt-5.4-mini, gpt-5.5 |
 | `openai-custom` (OpenRouter) | 4 | openai/gpt-oss-20b:free, deepseek/deepseek-v4-flash:free, nvidia/nemotron-3-super-120b-a12b:free, nvidia/nemotron-3-nano-30b-a3b:free |
+| `openai-iflow` | 20 | iflow-rome-30ba3b, qwen3-coder-plus, qwen3-max, qwen3-vl-plus, qwen3-max-preview, qwen3-32b, qwen3-235b-a22b-thinking-2507, qwen3-235b-a22b-instruct, qwen3-235b, kimi-k2-0905, kimi-k2, glm-4.6, deepseek-v3.2, deepseek-r1, deepseek-v3, glm-4.7, glm-5, kimi-k2.5, minimax-m2.1, minimax-m2.5 — ⚠ **DISABLED**: `adapter.js:716` commented out; not in `MODEL_PROVIDER` cascade |
+| `openai-qwen-oauth` | 3 | coder-model, vision-model, qwen3-coder-flash — ⚠ **DISABLED**: `adapter.js:715` commented out; not in `MODEL_PROVIDER` cascade |
 | `grok-web` | 11 | grok-4.1-mini, grok-4.1-thinking, grok-4.20, grok-4.20-auto, grok-4.20-fast, grok-4.20-expert, grok-4.20-heavy, grok-imagine-1.0, grok-imagine-1.0-edit, grok-imagine-1.0-fast, grok-imagine-1.0-fast-edit — **requires SSO tokens** in `configs/provider_pools.json → grok-web` |
 
 ---
@@ -210,7 +212,7 @@ print(f'{len(d[\"items\"])-len(bad)}/{len(d[\"items\"])} healthy')
 [print(f'  UNHEALTHY: {i[\"provider\"]} — {str(i.get(\"lastErrorMessage\",\"\"))[:80]}') for i in bad]
 "
 
-# 3. Models (expected: 36 across 8 providers)
+# 3. Models (default: 50 with current pool; +11 with grok-web SSO; +23 with iflow/qwen-oauth activated)
 curl -s http://127.0.0.1:3000/v1/models \
   -H "Authorization: Bearer sk-a60f3efdf9b97e63c84ab4a3583f9d1c" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); by={}; \
@@ -264,6 +266,7 @@ When a session makes significant changes (models added/removed, routing fixed, p
 9. **`--data-raw` for curl JSON in zsh.** `-d` silently corrupts JSON.
 10. **Verify OpenRouter models are live before adding.** Dead IDs return `400: not a valid model ID`.
 11. **90s HTTP timeout on openai-core.js.** Already applied — NVIDIA NIM and OpenRouter need this to avoid indefinite hangs.
+12. **`openai-iflow` and `openai-qwen-oauth` are DISABLED by default.** Activation requires uncommenting `adapter.js:715-716` AND adding to `MODEL_PROVIDER` cascade in `config.json` AND adding pool credentials. Do NOT add pool accounts without adapter registration — models will not route.
 
 ---
 
@@ -272,7 +275,7 @@ When a session makes significant changes (models added/removed, routing fixed, p
 | Concept | File | Location |
 |---|---|---|
 | Static model catalog | `src/providers/provider-models.js` | `PROVIDER_MODELS` — sync only |
-| Adapter registry | `src/providers/adapter.js` | `:704` registerAdapter, `:756` getServiceAdapter |
+| Adapter registry | `src/providers/adapter.js` | `:704` registerAdapter, `:771` getServiceAdapter, `:734` invalidateServiceAdaptersByProvider |
 | Pool selection + slots | `src/providers/provider-pool-manager.js` | `selectProvider`, `acquireSlotWithFallback` |
 | Model cooldowns (in-memory Map) | `src/providers/cooldown-manager.js` | `CooldownManager` — mark/isOnCooldown/clear |
 | SQLite persistence (health state) | `src/providers/persistence-manager.js` | `initDb`, `overlayHealthFromDb`, `flushPendingSaves` |
@@ -315,6 +318,9 @@ openai-custom       → [github-models, gemini-antigravity, claude-kiro-oauth]
 nvidia-nim          → [github-models, openai-custom]
 github-models       → [gemini-antigravity, openai-custom, nvidia-nim, claude-kiro-oauth]
 openai-codex-oauth  → [openai-custom, github-models, claude-kiro-oauth]
+grok-web            → [openai-custom, nvidia-nim, github-models]
+openai-iflow        → [openai-custom, github-models, nvidia-nim]  (only when activated)
+openai-qwen-oauth   → [openai-custom, nvidia-nim, github-models]  (only when activated)
 ```
 
 **Key modelFallbackMapping entries** (in `configs/config.json`):
@@ -348,7 +354,7 @@ print(f'{len(d[\"items\"])-len(bad)}/{len(d[\"items\"])} healthy')
 [print(f'  UNHEALTHY: {i[\"provider\"]} {str(i.get(\"lastErrorMessage\",\"\"))[:60]}') for i in bad]
 "
 
-# 3. Models
+# 3. Models (expect 69+ static; 80 if openai-iflow/qwen-oauth activated)
 curl -s http://127.0.0.1:3000/v1/models \
   -H "Authorization: Bearer sk-a60f3efdf9b97e63c84ab4a3583f9d1c" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print('models:', len(d['data']))"

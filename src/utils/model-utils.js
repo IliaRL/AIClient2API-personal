@@ -55,9 +55,6 @@ export function extractSystemPromptFromRequestBody(requestBody, provider) {
             const openaiSystemMessage = requestBody.messages?.find(m => m.role === 'system' || m.role === 'developer');
             if (openaiSystemMessage?.content) {
                 incomingSystemText = openaiSystemMessage.content;
-            } else if (requestBody.messages?.length > 0) {
-                const userMessage = requestBody.messages.find(m => m.role === 'user');
-                if (userMessage) incomingSystemText = userMessage.content;
             }
             if (typeof incomingSystemText === 'object' && incomingSystemText !== null) {
                 if (Array.isArray(incomingSystemText)) {
@@ -76,14 +73,6 @@ export function extractSystemPromptFromRequestBody(requestBody, provider) {
                     .filter(p => p?.text)
                     .map(p => p.text)
                     .join('\n');
-            } else if (requestBody.contents?.length > 0) {
-                const userContent = requestBody.contents[0];
-                if (userContent?.parts) {
-                    incomingSystemText = userContent.parts
-                        .filter(p => p?.text)
-                        .map(p => p.text)
-                        .join('\n');
-                }
             }
             break;
         case MODEL_PROTOCOL_PREFIX.CLAUDE:
@@ -91,15 +80,6 @@ export function extractSystemPromptFromRequestBody(requestBody, provider) {
                 incomingSystemText = requestBody.system;
             } else if (typeof requestBody.system === 'object') {
                 incomingSystemText = JSON.stringify(requestBody.system);
-            } else if (requestBody.messages?.length > 0) {
-                const userMessage = requestBody.messages.find(m => m.role === 'user');
-                if (userMessage) {
-                    if (Array.isArray(userMessage.content)) {
-                        incomingSystemText = userMessage.content.map(block => block.text).join('');
-                    } else {
-                        incomingSystemText = userMessage.content;
-                    }
-                }
             }
             break;
     }

@@ -34,3 +34,9 @@ src/plugins-user/
 pool_state.db
 configs/pwd
 
+
+.gemini/
+gha-creds-*.json
+
+# Duplicate reference directory (to prevent indexing loops)
+TEST_REF/

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 import { getServiceAdapter, getRegisteredProviders, invalidateServiceAdapter } from './adapter.js';
 import logger from '../utils/logger.js';
 import { MODEL_PROVIDER, getProtocolPrefix } from '../utils/common.js';
@@ -13,7 +14,6 @@ import {
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { ENDPOINT_TYPE } from '../utils/common.js';
 import { CooldownManager } from './cooldown-manager.js';
-import { initDb, persistHealthToDb, overlayHealthFromDb, debouncedSave, flushPendingSaves } from './persistence-manager.js';
 import * as cockpitQuota from '../utils/cockpit-quota.js';
 
 function getCustomModelAliasesForProvider(config, providerType) {
@@ -68,19 +68,14 @@ export class ProviderPoolManager {
     constructor(providerPools, options = {}) {
         this.providerPools = providerPools;
         this.globalConfig = options.globalConfig || {}; // 存储全局配置
-        this.providerStatus = {}; // Tracks health and usage for each provider instance
-        this.roundRobinIndex = {}; // Tracks the current index for round-robin selection for each provider type
+        this.providerStatus = Object.create(null); // Tracks health and usage for each provider instance
+        this.roundRobinIndex = Object.create(null); // Tracks the current index for round-robin selection for each provider type
         // 使用 ?? 运算符确保 0 也能被正确设置，而不是被 || 替换为默认值
         this.maxErrorCount = options.maxErrorCount ?? 10; // Default to 10 errors before marking unhealthy
         this.healthCheckInterval = options.healthCheckInterval ?? 10 * 60 * 1000; // Default to 10 minutes
 
             // 日志级别控制
         this.logLevel = options.logLevel || 'info'; // 'debug', 'info', 'warn', 'error'
-        
-        // 添加防抖机制，避免频繁的文件 I/O 操作
-        this.saveDebounceTime = options.saveDebounceTime || 1000; // 默认1秒防抖
-        this.saveTimer = null;
-        this.pendingSaves = new Set(); // 记录待保存的 providerType
         
         // Fallback 链配置
         this.fallbackChain = options.globalConfig?.providerFallbackChain || {};
@@ -90,8 +85,8 @@ export class ProviderPoolManager {
 
         // 并发控制：每个 providerType 的选择锁
         // 用于确保 selectProvider 的排序 and 更新操作是原子的
-        this._selectionLocks = {};
-        this._isSelecting = {}; // 同步标志位锁
+        this._selectionLocks = Object.create(null);
+        this._isSelecting = Object.create(null); // 同步标志位锁
 
         // --- V2: 读写分离 and 异步刷新队列 ---
         // 刷新并发控制配置
@@ -106,9 +101,8 @@ export class ProviderPoolManager {
         this.warmupTarget = options.globalConfig?.WARMUP_TARGET || 0; // 默认预热0个节点
         this.refreshingUuids = new Set(); // 正在刷新的节点 UUID 集合
         
-        this.refreshQueues = {}; // 按 providerType 分组的队列
+        this.refreshQueues = Object.create(null); // 按 providerType 分组的队列
         // 缓冲队列机制：延迟5秒，去重后再执行刷新
-        this.refreshBufferQueues = {}; // 按 providerType 分组的缓冲队列
         this.refreshBufferTimers = {}; // 按 providerType 分组的定时器
         this.bufferDelay = options.globalConfig?.REFRESH_BUFFER_DELAY ?? 5000; // 默认5秒缓冲延迟
         this.refreshTaskTimeoutMs = options.globalConfig?.REFRESH_TASK_TIMEOUT_MS ?? 60000; // 默认60秒刷新超时
@@ -118,13 +112,13 @@ export class ProviderPoolManager {
 
         // 模型临时冷却：当某个 providerType 在某模型上连续返回 400 时，临时把该模型从该提供商池排除
         // Delegated to CooldownManager
-        this.modelCooldownDurationMs = options.globalConfig?.MODEL_COOLDOWN_MS ?? 300000; // 5 分钟
+        this.modelCooldownDurationMs = options.globalConfig?.MODEL_COOLDOWN_MS ?? 300000; // 5 minutes
         this._cooldownManager = new CooldownManager(this.modelCooldownDurationMs);
 
-        // SQLite pool state — prepared statements cached after first init
-        this._db = null;
-        this._stmts = null;
-        this._initDb();
+        // Disk persistence debounce — batches writes to avoid I/O on every health event
+        this.saveDebounceTime = options.saveDebounceTime || 1000;
+        this.saveTimer = null;
+        this.pendingSaves = new Set();
 
         this.initializeProviderStatus();
     }
@@ -178,7 +172,13 @@ export class ProviderPoolManager {
 
                 // Use in-memory cached expiry (set after successful refresh) to avoid blocking readFileSync on cron.
                 // Fall back to disk read only once per account (populates the cache for future runs).
-                let expiryTime = config.tokenExpiresAt ?? null;
+                // IMPORTANT: treat tokenExpiresAt:0 (epoch) as null — it is a pool sentinel meaning
+                // "expiry not yet read from disk", NOT "token expired at Unix epoch t=0".
+                // Without this guard every account with tokenExpiresAt:0 (all Antigravity accounts)
+                // is flagged as expired on every cron tick, causing ~26 gratuitous refresh calls/hour.
+                let expiryTime = (config.tokenExpiresAt != null && config.tokenExpiresAt > 0)
+                    ? config.tokenExpiresAt
+                    : null;
 
                 if (expiryTime === null && configPath && fs.existsSync(configPath)) {
                     try {
@@ -530,7 +530,6 @@ export class ProviderPoolManager {
                 config.needsRefresh = false;
                 config.refreshCount = 0;
                 config.errorCount = 0; // 成功/无操作也重置错误计数
-                
                 this._debouncedSave(providerType);
             } else {
                 throw new Error(`refreshToken method not implemented for ${providerType}`);
@@ -538,11 +537,11 @@ export class ProviderPoolManager {
 
         } catch (error) {
             this._log('error', `Token refresh failed for node ${this._getDisplayName(config)}: ${error.message}`);
-            
+
             // 记录错误信息
             config.lastErrorTime = new Date().toISOString();
             config.lastErrorMessage = `Refresh failed: ${error.message}`;
-            
+
             // 增加错误计数（用于普通的健康检查参考，虽然刷新错误主要参考 refreshCount）
             config.errorCount = (config.errorCount || 0) + 1;
 
@@ -557,8 +556,7 @@ export class ProviderPoolManager {
 
                 // 增加冷却保护：更新 lastRefreshTime，利用 markProviderNeedRefresh 中的 30s 保护逻辑，
                 // 防止因瞬时高并发请求导致 5 次重试机会在短时间内被耗尽。
-                config.lastRefreshTime = Date.now(); 
-                
+                config.lastRefreshTime = Date.now();
                 this._debouncedSave(providerType);
             }
             throw error;
@@ -798,7 +796,7 @@ export class ProviderPoolManager {
     initializeProviderStatus(syncFromConfig = false) {
         const oldFullStatus = this.providerStatus || {};
         const isColdStart = Object.keys(oldFullStatus).length === 0;
-        this.providerStatus = {}; // Tracks health and usage for each provider instance
+        this.providerStatus = Object.create(null); // Tracks health and usage for each provider instance
         for (const providerType in this.providerPools) {
             const oldStatus = oldFullStatus[providerType] || [];
             this.providerStatus[providerType] = [];
@@ -820,8 +818,14 @@ export class ProviderPoolManager {
                 });
             }
             
-            pool.forEach((providerConfig) => {
+            pool.forEach((providerConfig, idx) => {
                 try {
+                    // Ensure UUID exists
+                    if (!providerConfig.uuid) {
+                        providerConfig.uuid = `auto-${providerType}-${idx}-${Date.now()}`;
+                        this._log('warn', `Auto-generated uuid for ${providerType} config index ${idx}`);
+                    }
+
                     // 尝试从旧状态中恢复活跃请求计数和队列，避免重载配置时重置并发限制
                     const existing = oldStatus.find(p => p.uuid === providerConfig.uuid);
 
@@ -897,13 +901,7 @@ export class ProviderPoolManager {
                 }
             });
             
-            // 确保初始化时的默认值补全也能写盘
-            this._debouncedSave(providerType);
         }
-        // Overlay persisted health state and model cooldowns from SQLite.
-        // This makes health state and model cooldowns survive proxy restarts.
-        this._overlayHealthFromDb();
-
         this._log('info', `Initialized provider statuses: ok (maxErrorCount: ${this.maxErrorCount})`);
     }
 
@@ -1124,8 +1122,6 @@ export class ProviderPoolManager {
         if (!options.skipUsageCount) {
             selected.config.usageCount++;
         }
-        // 使用防抖保存（文件 I/O 是异步的，但内存已经更新）
-        this._debouncedSave(providerType);
 
         this._log('debug', `Selected provider for ${providerType} (LRU): ${this._getDisplayName(selected.config)}${requestedModel ? ` for model: ${requestedModel}` : ''}${options.skipUsageCount ? ' (skip usage count)' : ''}`);
         
@@ -1140,6 +1136,14 @@ export class ProviderPoolManager {
             this._log('error', `Invalid providerType: ${providerType}`);
             return null;
         }
+
+        // Cycle guard — mirrors selectProviderWithFallback to prevent stack overflow on circular modelFallbackMapping
+        const _triedModels = options._triedModels ?? new Set();
+        if (requestedModel && _triedModels.has(requestedModel)) {
+            this._log('warn', `[CycleGuard] acquireSlotWithFallback: cycle detected for model ${requestedModel}, suppressing recursion`);
+            return null;
+        }
+        if (requestedModel) _triedModels.add(requestedModel);
 
         const triedTypes = new Set();
         const typesToTry = [providerType];
@@ -1208,7 +1212,7 @@ export class ProviderPoolManager {
             if (targetProviderType && targetModel) {
                 this._log('info', `All providers for '${requestedModel}' exhausted. Falling back to model '${targetModel}'...`);
                 // 递归调用，尝试下一个模型；递归结果将携带最终选中的 actualModel
-                const recursiveResult = await this.acquireSlotWithFallback(targetProviderType, targetModel, options);
+                const recursiveResult = await this.acquireSlotWithFallback(targetProviderType, targetModel, { ...options, _triedModels });
                 if (recursiveResult) {
                     // 标记为 fallback，并显式回填 actualModel（防止递归层未填写）
                     recursiveResult.isFallback = true;
@@ -1278,7 +1282,6 @@ export class ProviderPoolManager {
         }
         item.config.modelCooldowns[model] = new Date(expiryMs).toISOString();
         this._log('warn', `[Account Model Cooldown] ${providerType} (${this._getDisplayName(item.config)}) :: ${model} cooled down until ${new Date(expiryMs).toISOString()}`);
-        if (typeof this._debouncedSave === 'function') this._debouncedSave(providerType);
     }
 
     /**
@@ -1299,7 +1302,6 @@ export class ProviderPoolManager {
             p.config.modelCooldowns[model] = expiryIso;
         }
         this._log('warn', `[All-Accounts Model Cooldown] ${providerType} :: ${model} cooled down until ${expiryIso} (${providers.length} accounts)`);
-        if (typeof this._debouncedSave === 'function') this._debouncedSave(providerType);
     }
 
     /**
@@ -1681,11 +1683,10 @@ export class ProviderPoolManager {
 
             provider.config.needsRefresh = true;
             this._log('info', `Marked provider ${this._getDisplayName(providerConfig)} as needsRefresh. Enqueuing...`);
-            
+            this._debouncedSave(providerType);
+
             // 推入异步刷新队列
             this._enqueueRefresh(providerType, provider, true);
-            
-            this._debouncedSave(providerType);
         } else {
             let matchedType = null;
             for (const [type, providers] of Object.entries(this.providerStatus || {})) {
@@ -1749,10 +1750,6 @@ export class ProviderPoolManager {
                 
                 this._log('warn', `Marked provider as unhealthy: ${this._getDisplayName(providerConfig)} for type ${providerType}. Total errors: ${provider.config.errorCount}`);
             }
-
-            // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
-
             this._debouncedSave(providerType);
         }
     }
@@ -1794,10 +1791,6 @@ export class ProviderPoolManager {
             }
 
             this._log('warn', `Immediately marked provider as unhealthy: ${this._getDisplayName(providerConfig)} for type ${providerType}. Reason: ${errorMessage || 'Authentication error'}`);
-
-            // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
-
             this._debouncedSave(providerType);
         }
     }
@@ -1841,10 +1834,6 @@ export class ProviderPoolManager {
             } else {
                 this._log('warn', `Marked provider as unhealthy: ${this._getDisplayName(providerConfig)} for type ${providerType}. Reason: ${errorMessage || 'Quota exhausted'}`);
             }
-
-            // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
-
             this._debouncedSave(providerType);
         }
     }
@@ -1857,12 +1846,14 @@ export class ProviderPoolManager {
      * @param {string} [healthCheckModel] - Optional model name used for health check.
      */
     markProviderHealthy(providerType, providerConfig, resetUsageCount = false, healthCheckModel = null) {
-        if (!providerConfig?.uuid) {
+        if (!providerConfig?.uuid && !providerConfig?.customName) {
             this._log('error', 'Invalid providerConfig in markProviderHealthy');
             return;
         }
 
-        const provider = this._findProvider(providerType, providerConfig.uuid);
+        const provider = providerConfig.uuid
+            ? this._findProvider(providerType, providerConfig.uuid)
+            : (this.providerStatus[providerType]?.find(p => p.config.customName === providerConfig.customName) || null);
         if (provider) {
             const wasHealthy = provider.config.isHealthy;
             provider.config.isHealthy = true;
@@ -1894,10 +1885,6 @@ export class ProviderPoolManager {
             }
             
             this._log('info', `Marked provider as healthy: ${this._getDisplayName(provider.config)} for type ${providerType}${resetUsageCount ? ' (usage count reset)' : ''}`);
-
-            // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
-
             this._debouncedSave(providerType);
         }
     }
@@ -1921,12 +1908,7 @@ export class ProviderPoolManager {
             provider.config.lastRefreshTime = Date.now(); // 显式重置时也更新刷新时间
             // 更新为可用
             provider.config.lastHealthCheckTime = new Date().toISOString();
-            // 标记为健康，以便立即投入使用
             this._log('info', `Reset refresh status and marked healthy for provider ${this._getDisplayName(provider.config)} (${providerType})`);
-
-            // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.config.uuid));
-
             this._debouncedSave(providerType);
         }
     }
@@ -1951,11 +1933,6 @@ export class ProviderPoolManager {
             provider.config.lastErrorMessage = null;
             provider.config._lastSelectionSeq = 0;
             this._log('info', `Reset provider counters: ${this._getDisplayName(provider.config)} for type ${providerType}`);
-
-            // Persist health state synchronously to SQLite
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, providerConfig.uuid));
-
-            this._debouncedSave(providerType);
         }
     }
 
@@ -1977,13 +1954,6 @@ export class ProviderPoolManager {
         });
 
         this._log('info', `Reset all health status for type ${providerType}`);
-
-        // Persist all accounts synchronously to SQLite
-        pool.forEach((provider, idx) => {
-            this._persistHealthToDb(providerType, provider.config, idx);
-        });
-
-        this._debouncedSave(providerType);
     }
 
     /**
@@ -2001,8 +1971,6 @@ export class ProviderPoolManager {
         if (provider) {
             provider.config.isDisabled = true;
             this._log('info', `Disabled provider: ${this._getDisplayName(providerConfig)} for type ${providerType}`);
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
-            this._debouncedSave(providerType);
         }
     }
 
@@ -2021,8 +1989,6 @@ export class ProviderPoolManager {
         if (provider) {
             provider.config.isDisabled = false;
             this._log('info', `Enabled provider: ${this._getDisplayName(providerConfig)} for type ${providerType}`);
-            this._persistHealthToDb(providerType, provider.config, this._getAccountIndex(providerType, provider.uuid));
-            this._debouncedSave(providerType);
         }
     }
 
@@ -2065,8 +2031,7 @@ export class ProviderPoolManager {
             }
             
             this._log('info', `Refreshed provider UUID for ${this._getDisplayName(provider.config)}: ${oldUuid} -> ${newUuid} for type ${providerType}`);
-            this._debouncedSave(providerType);
-            
+
             return newUuid;
         }
         
@@ -2100,13 +2065,6 @@ export class ProviderPoolManager {
                         config.lastErrorTime = null;
                         config.lastErrorMessage = null;
                         config.scheduledRecoveryTime = null; // 清除恢复时间
-
-                        // Persist health recovery to SQLite
-                        const recIdx = this._getAccountIndex(type, config.uuid);
-                        this._persistHealthToDb(type, config, recIdx);
-
-                        // 保存更改
-                        this._debouncedSave(type);
                     }
                 }
             }
@@ -2261,9 +2219,12 @@ export class ProviderPoolManager {
         for (const { providerType, provider, uuid, customName } of providersToCheck) {
             const providerCheckStart = Date.now();
             const baseProviderType = this._getBaseProviderType(providerType);
-            const checkModelName = provider.config.checkModelName || 
-                                ProviderPoolManager.DEFAULT_HEALTH_CHECK_MODELS[providerType] || 
-                                ProviderPoolManager.DEFAULT_HEALTH_CHECK_MODELS[baseProviderType] || 
+            const configHealthModels = this.globalConfig?.healthCheckModels || {};
+            const checkModelName = provider.config.checkModelName ||
+                                configHealthModels[providerType] ||
+                                configHealthModels[baseProviderType] ||
+                                ProviderPoolManager.DEFAULT_HEALTH_CHECK_MODELS[providerType] ||
+                                ProviderPoolManager.DEFAULT_HEALTH_CHECK_MODELS[baseProviderType] ||
                                 'unknown';
             const displayName = this._getDisplayName(provider.config);
 
@@ -2394,7 +2355,10 @@ export class ProviderPoolManager {
     async _checkProviderHealth(providerType, providerConfig) {
         // 确定健康检查使用的模型名称
         const baseProviderType = this._getBaseProviderType(providerType);
+        const configHealthModels = this.globalConfig?.healthCheckModels || {};
         const modelName = providerConfig.checkModelName ||
+                        configHealthModels[providerType] ||
+                        configHealthModels[baseProviderType] ||
                         ProviderPoolManager.DEFAULT_HEALTH_CHECK_MODELS[providerType] ||
                         ProviderPoolManager.DEFAULT_HEALTH_CHECK_MODELS[baseProviderType];
 
@@ -2453,39 +2417,68 @@ export class ProviderPoolManager {
         return { success: false, modelName, errorMessage: lastError?.message || 'All health check attempts failed' };
     }
 
-    // ─── SQLite health-state persistence ────────────────────────────────────────
-
-    _initDb() {
-        const { db, stmts } = initDb(this._log.bind(this));
-        this._db = db;
-        this._stmts = stmts;
-    }
-
     _getAccountIndex(providerType, uuid) {
         const pool = this.providerStatus[providerType] || [];
         return pool.findIndex(p => p.uuid === uuid);
     }
 
-    _persistHealthToDb(providerType, providerConfig, accountIndex) {
-        persistHealthToDb(this._db, this._stmts, providerType, providerConfig, accountIndex, this._log.bind(this));
-    }
-
-    _overlayHealthFromDb() {
-        overlayHealthFromDb(this._db, this._stmts, this.providerStatus, this._log.bind(this));
-    }
-
-    // ────────────────────────────────────────────────────────────────────────────
+    // ==================== Disk Persistence ====================
 
     _debouncedSave(providerType) {
-        const state = { pendingSaves: this.pendingSaves, saveTimer: this.saveTimer, saveDebounceTime: this.saveDebounceTime };
-        debouncedSave(providerType, state, () => this._flushPendingSaves());
-        this.saveTimer = state.saveTimer;
+        this.pendingSaves.add(providerType);
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        this.saveTimer = setTimeout(() => { this._flushPendingSaves(); }, this.saveDebounceTime);
     }
-    
+
     async _flushPendingSaves() {
-        const state = { pendingSaves: this.pendingSaves, saveTimer: this.saveTimer, saveDebounceTime: this.saveDebounceTime };
-        await flushPendingSaves(this.providerStatus, state, this.globalConfig, this._log.bind(this));
-        this.saveTimer = state.saveTimer;
+        if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+
+        const filePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+
+        await withFileLock(filePath, async (checkValidity) => {
+            const typesToSave = Array.from(this.pendingSaves);
+            if (typesToSave.length === 0) return;
+            this.pendingSaves.clear();
+
+            try {
+                let currentPools = {};
+                try {
+                    const fileContent = await fs.promises.readFile(filePath, 'utf8');
+                    currentPools = JSON.parse(fileContent);
+                } catch (readError) {
+                    if (readError.code !== 'ENOENT') throw readError;
+                }
+
+                checkValidity();
+
+                for (const type of typesToSave) {
+                    if (this.providerStatus[type]) {
+                        currentPools[type] = this.providerStatus[type].map(p => {
+                            const config = { ...p.config };
+                            if (config.lastUsed instanceof Date) config.lastUsed = config.lastUsed.toISOString();
+                            if (config.lastErrorTime instanceof Date) config.lastErrorTime = config.lastErrorTime.toISOString();
+                            if (config.lastHealthCheckTime instanceof Date) config.lastHealthCheckTime = config.lastHealthCheckTime.toISOString();
+                            return config;
+                        });
+                    }
+                }
+
+                await atomicWriteFile(filePath, JSON.stringify(currentPools, null, 2), { encoding: 'utf8', mode: 0o600 });
+                this._log('info', `provider_pools.json updated for: ${typesToSave.join(', ')}`);
+
+                // Automatically sync credentials to master Credentials.md in the background
+                try {
+                    const { syncCredentials } = await import('../../scripts/sync-credentials.js');
+                    syncCredentials({ verbose: false }).catch(err => {
+                        logger.error(`[CredentialsSync] Auto-sync failed: ${err.message}`);
+                    });
+                } catch (importErr) {
+                    logger.error(`[CredentialsSync] Failed to import syncCredentials utility: ${importErr.message}`);
+                }
+            } catch (error) {
+                this._log('error', `Failed to write provider_pools.json: ${error.message}`);
+            }
+        });
     }
 
 }

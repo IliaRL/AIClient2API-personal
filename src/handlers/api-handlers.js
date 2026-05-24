@@ -147,7 +147,19 @@ export async function handleStreamRequest(res, service, model, requestBody, from
 
             if (result && result.service) {
                 const newRetryContext = { ...retryContext, currentRetry: currentRetry + 1, clientDisconnected, anyDataSent, isFallback: true };
-                return await handleStreamRequest(res, result.service, result.actualModel || model, requestBody, fromProvider, result.actualProviderType || toProvider, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, result.uuid, result.serviceConfig?.customName || customName, newRetryContext);
+                const newToProvider = result.actualProviderType || toProvider;
+                let newRequestBody = requestBody;
+                
+                if (retryContext.originalRequestBody) {
+                    newRequestBody = { ...retryContext.originalRequestBody };
+                    if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(newToProvider)) {
+                        newRequestBody = convertData(newRequestBody, 'request', fromProvider, newToProvider);
+                    }
+                    const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(newToProvider));
+                    newRequestBody = await strategy.applySystemPromptFromFile(CONFIG, newRequestBody);
+                }
+
+                return await handleStreamRequest(res, result.service, result.actualModel || model, newRequestBody, fromProvider, newToProvider, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, result.uuid, result.serviceConfig?.customName || customName, newRetryContext);
             }
         }
 
@@ -184,6 +196,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
             error.skipErrorCount = true;
             throw error;
         }
+        console.log('[DEBUG-REQUEST-BODY] TO-PROVIDER:', toProvider, 'BODY:', JSON.stringify(requestBody).substring(0, 500));
         const nativeResponse = await service.generateContent(model, requestBody);
         const responseText = extractResponseText(nativeResponse, toProvider);
         let clientResponse = needsConversion ? convertData(nativeResponse, 'response', toProvider, fromProvider, model) : nativeResponse;
@@ -193,6 +206,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         await logConversation('output', responseText, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
         if (providerPoolManager && pooluuid) providerPoolManager.markProviderHealthy(toProvider, { uuid: pooluuid });
     } catch (error) {
+        console.log('[DEBUG-FALLBACK-CATCH] Caught error:', error.message, 'statusCode:', getErrorStatusCode(error));
         const rateLimitRecoveryTime = getRateLimitCooldownRecoveryTime(error, CONFIG);
         const statusCode = getErrorStatusCode(error);
         if (rateLimitRecoveryTime && providerPoolManager && pooluuid) {
@@ -226,7 +240,21 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
 
             if (result && result.service) {
                 const newRetryContext = { ...retryContext, currentRetry: currentRetry + 1, isFallback: true };
-                return await handleUnaryRequest(res, result.service, result.actualModel || model, requestBody, fromProvider, result.actualProviderType || toProvider, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, result.uuid, result.serviceConfig?.customName || customName, newRetryContext);
+                const newToProvider = result.actualProviderType || toProvider;
+                let newRequestBody = requestBody;
+
+                if (retryContext.originalRequestBody) {
+                    newRequestBody = { ...retryContext.originalRequestBody };
+                    if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(newToProvider)) {
+                        newRequestBody = convertData(newRequestBody, 'request', fromProvider, newToProvider);
+                        console.log('[DEBUG-FALLBACK-CONVERT] original was:', JSON.stringify(retryContext.originalRequestBody).substring(0,200));
+                        console.log('[DEBUG-FALLBACK-CONVERT] converted to:', newToProvider, 'body:', JSON.stringify(newRequestBody).substring(0,200));
+                    }
+                    const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(newToProvider));
+                    newRequestBody = await strategy.applySystemPromptFromFile(CONFIG, newRequestBody);
+                }
+
+                return await handleUnaryRequest(res, result.service, result.actualModel || model, newRequestBody, fromProvider, newToProvider, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, result.uuid, result.serviceConfig?.customName || customName, newRetryContext);
             }
         }
         const metadata = { actualProvider: toProvider, actualModel: model, isFallback: retryContext?.isFallback, uuid: pooluuid };
@@ -237,8 +265,8 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
 }
 
 export async function handleModelListRequest(req, res, service, endpointType, CONFIG, providerPoolManager, pooluuid) {
-    const clientProviderMap = { [ENDPOINT_TYPE.OPENAI_MODEL_LIST]: MODEL_PROTOCOL_PREFIX.OPENAI, [ENDPOINT_TYPE.GEMINI_MODEL_LIST]: MODEL_PROTOCOL_PREFIX.GEMINI };
-    const fromProvider = clientProviderMap[endpointType];
+    const clientProviderMap = Object.assign(Object.create(null), { [ENDPOINT_TYPE.OPENAI_MODEL_LIST]: MODEL_PROTOCOL_PREFIX.OPENAI, [ENDPOINT_TYPE.GEMINI_MODEL_LIST]: MODEL_PROTOCOL_PREFIX.GEMINI });
+    const fromProvider = Object.hasOwn(clientProviderMap, endpointType) ? clientProviderMap[endpointType] : undefined;
     try {
         const cacheKey = `${endpointType}-${CONFIG.REQUIRED_API_KEY || ''}`;
         const cachedResponse = getCachedResponse(cacheKey);
@@ -272,15 +300,18 @@ function buildConfiguredModelListResponse(models, providerType, listEndpointType
 }
 
 export async function handleContentGenerationRequest(req, res, service, endpointType, CONFIG, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, requestPath = null) {
+    console.log("DEBUG: api-handlers.js handleContentGenerationRequest CALLED!");
     let fromProvider;
     try {
         const originalRequestBody = await getRequestBody(req);
         if (req.headers['x-force-fallback'] === 'true') {
             originalRequestBody._forceFallbackTesting = true;
         }
-        fromProvider = { [ENDPOINT_TYPE.OPENAI_CHAT]: MODEL_PROTOCOL_PREFIX.OPENAI, [ENDPOINT_TYPE.OPENAI_RESPONSES]: MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, [ENDPOINT_TYPE.CLAUDE_MESSAGE]: MODEL_PROTOCOL_PREFIX.CLAUDE, [ENDPOINT_TYPE.GEMINI_CONTENT]: MODEL_PROTOCOL_PREFIX.GEMINI }[endpointType];
+        const endpointMap = Object.assign(Object.create(null), { [ENDPOINT_TYPE.OPENAI_CHAT]: MODEL_PROTOCOL_PREFIX.OPENAI, [ENDPOINT_TYPE.OPENAI_RESPONSES]: MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, [ENDPOINT_TYPE.CLAUDE_MESSAGE]: MODEL_PROTOCOL_PREFIX.CLAUDE, [ENDPOINT_TYPE.GEMINI_CONTENT]: MODEL_PROTOCOL_PREFIX.GEMINI });
+        fromProvider = Object.hasOwn(endpointMap, endpointType) ? endpointMap[endpointType] : undefined;
         let toProvider = CONFIG.actualProviderType || CONFIG.MODEL_PROVIDER;
         let { model, isStream } = ProviderStrategyFactory.getStrategy(getProtocolPrefix(fromProvider)).extractModelAndStreamInfo(req, originalRequestBody);
+        const originalModel = model;
 
         const shouldSelectByPool = providerPoolManager && (CONFIG.MODEL_PROVIDER === MODEL_PROVIDER.AUTO || (CONFIG.providerPools && CONFIG.providerPools[CONFIG.MODEL_PROVIDER]));
         let isFallback = false;
@@ -297,10 +328,10 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider)) processedRequestBody = convertData(processedRequestBody, 'request', fromProvider, toProvider);
 
         const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(toProvider));
-        processedRequestBody = await strategy.applySystemPromptFromFile(CONFIG, processedRequestBody);
         await strategy.manageSystemPrompt(processedRequestBody);
+        processedRequestBody = await strategy.applySystemPromptFromFile(CONFIG, processedRequestBody);
 
-        const retryContext = { CONFIG, currentRetry: 0, maxRetries: CONFIG.CREDENTIAL_SWITCH_MAX_RETRIES || 5, triedModels: new Set([model]), isFallback };
+        const retryContext = { CONFIG, currentRetry: 0, maxRetries: CONFIG.CREDENTIAL_SWITCH_MAX_RETRIES || 5, triedModels: new Set([model]), isFallback, originalRequestBody, originalModel };
         if (isStream) await handleStreamRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, CONFIG.customName, retryContext);
         else await handleUnaryRequest(res, service, model, processedRequestBody, fromProvider, toProvider, CONFIG.PROMPT_LOG_MODE, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, CONFIG.customName, retryContext);
     } catch (error) {

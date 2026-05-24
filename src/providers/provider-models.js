@@ -43,7 +43,7 @@ export function getCustomModelConfig(modelId, provider = null) {
  * 各提供商支持的模型列表
  * 用于前端UI选择不支持的模型
  */
-export const PROVIDER_MODELS = {
+export const PROVIDER_MODELS = Object.assign(Object.create(null), {
     'gemini-cli-oauth': [
         // Active gemini-cli-oauth models (gemma removed 2026-05-15 — no longer
         // exposed on the upstream account).
@@ -73,11 +73,32 @@ export const PROVIDER_MODELS = {
     'claude-custom': [],
     'claude-kiro-oauth': [
         'claude-haiku-4-5',
+        'claude-haiku-4-5-20251001',
+        'claude-sonnet-4-0',
         'claude-sonnet-4-5',
         'claude-sonnet-4-5-20250929',
+        // 2026-05-22: Sonnet 4.6 served natively by Kiro (FULL_MODEL_MAPPING -> claude-sonnet-4.6).
+        // Added because the Antigravity Claude-via-Vertex passthrough now returns 403 for all
+        // Claude tiers; Kiro is the live path for real Sonnet 4.6.
+        'claude-sonnet-4-6',
+        // 2026-05-22: Thinking variant — same upstream model (claude-sonnet-4.6) but the
+        // -thinking suffix auto-injects thinking:{type:"enabled"} in claude-kiro.js so
+        // Claude Code users can select thinking mode without a custom request param.
+        'claude-sonnet-4-6-thinking',
         'claude-opus-4-5',
+        'claude-opus-4-5-20251101',
         'claude-opus-4-6',
         'claude-opus-4-7',
+        // Auto + third-party models available via Kiro
+        'auto',
+        'deepseek-3.2',
+        'deepseek-3-2',
+        'minimax-m2.5',
+        'minimax-m2-5',
+        'glm-5',
+        'minimax-m2.1',
+        'minimax-m2-1',
+        'qwen3-coder-next',
     ],
     'openai-custom': [],
     'openaiResponses-custom': [],
@@ -117,6 +138,7 @@ export const PROVIDER_MODELS = {
     'openai-codex-oauth': [
         // Verified live on 2026-05-15. gpt-5.3-codex-spark returned 400 invalid
         // request upstream and was removed; re-add if Codex enables it.
+        // gpt-5.2-codex confirmed invalid (400) for ChatGPT-based Codex accounts.
         'gpt-5.2',
         'gpt-5.3-codex',
         'gpt-5.4',
@@ -124,16 +146,19 @@ export const PROVIDER_MODELS = {
         'gpt-5.5',
     ],
     'github-models': [
-        // Exhaustively live-verified 2026-05-16 against models.inference.ai.azure.com.
-        // Dead: gpt-5-mini (unavailable), claude-haiku-4-5 (unknown), o3-mini (unavailable),
-        //       o1/o1-mini/o1-preview (unavailable), all Mistral variants (unknown),
-        //       Meta-Llama 70B/3.3/3.2 (unknown), Phi-3.5, Cohere, AI21 (unknown).
+        // Live-verified 2026-05-22 against models.inference.ai.azure.com.
+        // Dead: gpt-5-mini, claude-haiku-4-5, o3-mini, o1/o1-mini/o1-preview,
+        //       Mistral variants, Meta-Llama 70B/3.3/3.2, Phi-3.5, Cohere, AI21.
         'gpt-4o',
         'gpt-4o-mini',
         'gpt-4.1',
         'gpt-4.1-mini',
         'gpt-4.1-nano',
-        'DeepSeek-R1'
+        'DeepSeek-R1',
+        'DeepSeek-V3-0324',
+        'Meta-Llama-3.1-405B-Instruct',
+        'Meta-Llama-3.1-8B-Instruct',
+        'Phi-4',
     ],
     'nvidia-nim': [
         // Verified live against integrate.api.nvidia.com on 2026-05-15 with the
@@ -164,7 +189,7 @@ export const PROVIDER_MODELS = {
         'grok-imagine-1.0-fast',
         'grok-imagine-1.0-fast-edit',
     ]
-};
+});
 
 export const MANAGED_MODEL_LIST_PROVIDERS = [
     'openai-custom',
@@ -305,9 +330,11 @@ export function getProviderModels(providerType) {
  */
 export function getAllProviderModels() {
     // 执行深拷贝，避免修改原始 PROVIDER_MODELS 对象
-    const allModels = {};
+    const allModels = Object.create(null);
     for (const provider in PROVIDER_MODELS) {
-        allModels[provider] = [...PROVIDER_MODELS[provider]];
+        if (Object.hasOwn(PROVIDER_MODELS, provider)) {
+            allModels[provider] = [...PROVIDER_MODELS[provider]];
+        }
     }
     
     // 合并自定义模型到对应的提供商

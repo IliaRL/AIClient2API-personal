@@ -76,8 +76,27 @@ export async function handleEvents(req, res) {
 /**
  * Initialize UI management features
  */
+// Accumulate log entries and flush to SSE clients in one write per 50ms tick
+// instead of one SSE write per log line on the request hot path.
+function enqueueLogEntry(entry) {
+    if (!global._logBatch) global._logBatch = [];
+    global._logBatch.push(entry);
+    if (!global._logFlushTimer) {
+        global._logFlushTimer = setTimeout(() => {
+            const batch = global._logBatch;
+            global._logBatch = [];
+            global._logFlushTimer = null;
+            if (!global.eventClients || global.eventClients.length === 0 || !batch.length) return;
+            const payload = JSON.stringify(batch);
+            global.eventClients.forEach(client => {
+                client.write(`event: log_batch\n`);
+                client.write(`data: ${payload}\n\n`);
+            });
+        }, 50);
+    }
+}
+
 export function initializeUIManagement() {
-    // Initialize log broadcasting for UI
     if (!global.eventClients) {
         global.eventClients = [];
     }
@@ -85,63 +104,24 @@ export function initializeUIManagement() {
         global.logBuffer = [];
     }
 
-    // Override console.log to broadcast logs
-    const originalLog = console.log;
-    console.log = function(...args) {
-        originalLog.apply(console, args);
-        
-        let message = args.map(arg => {
-            if (typeof arg === 'string') return arg;
-            try {
-                return JSON.stringify(arg);
-            } catch (e) {
-                return String(arg);
-            }
-        }).join(' ');
-
-        // Strip server-side timestamp if present [YYYY-MM-DD HH:MM:SS.mmm]
-        message = message.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\]\s*/, '');
-
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            level: 'info',
-            message: message
+    function captureLog(level, originalFn) {
+        return function(...args) {
+            originalFn.apply(console, args);
+            if (!global.eventClients || global.eventClients.length === 0) return;
+            let message = args.map(arg => {
+                if (typeof arg === 'string') return arg;
+                try { return JSON.stringify(arg); } catch (e) { return String(arg); }
+            }).join(' ');
+            message = message.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\]\s*/, '');
+            const logEntry = { timestamp: new Date().toISOString(), level, message };
+            global.logBuffer.push(logEntry);
+            if (global.logBuffer.length > 100) global.logBuffer.shift();
+            enqueueLogEntry(logEntry);
         };
-        global.logBuffer.push(logEntry);
-        if (global.logBuffer.length > 100) {
-            global.logBuffer.shift();
-        }
-        broadcastEvent('log', logEntry);
-    };
+    }
 
-    // Override console.error to broadcast errors
-    const originalError = console.error;
-    console.error = function(...args) {
-        originalError.apply(console, args);
-        
-        let message = args.map(arg => {
-            if (typeof arg === 'string') return arg;
-            try {
-                return JSON.stringify(arg);
-            } catch (e) {
-                return String(arg);
-            }
-        }).join(' ');
-
-        // Strip server-side timestamp if present
-        message = message.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\]\s*/, '');
-
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            level: 'error',
-            message: message
-        };
-        global.logBuffer.push(logEntry);
-        if (global.logBuffer.length > 100) {
-            global.logBuffer.shift();
-        }
-        broadcastEvent('log', logEntry);
-    };
+    console.log = captureLog('info', console.log);
+    console.error = captureLog('error', console.error);
 }
 
 // 配置multer中间件
@@ -247,12 +227,13 @@ export function handleUploadOAuthCredentials(req, res, options = {}) {
                 if (provider === 'kiro') {
                     // 使用时间戳作为子文件夹名称，确保每个上传的文件都有独立的目录
                     const timestamp = Date.now();
-                    const originalNameWithoutExt = path.parse(req.file.originalname).name;
+                    const sanitizedOriginalName = path.basename(req.file.originalname);
+                    const originalNameWithoutExt = path.parse(sanitizedOriginalName).name;
                     const subFolder = `${timestamp}_${originalNameWithoutExt}`;
                     targetDir = path.join(targetDir, subFolder);
                 }
                 
-                const targetFilePath = path.join(targetDir, req.file.filename);
+                const targetFilePath = path.join(targetDir, path.basename(req.file.filename));
 
                 // 安全边界防御：计算绝对路径以防止路径穿越，确保目标文件严格存在于 configs 目录内
                 const allowedBaseDir = path.resolve(process.cwd(), 'configs');

@@ -4,7 +4,7 @@ import { INPUT_SYSTEM_PROMPT_FILE } from '../utils/common.js';
 import { MODEL_PROVIDER } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 
-export let CONFIG = {}; // Make CONFIG exportable
+export const CONFIG = {}; // Populated via Object.assign — never reassign this reference
 export let PROMPT_LOG_FILENAME = ''; // Make PROMPT_LOG_FILENAME exportable
 
 const ALL_MODEL_PROVIDERS = Object.values(MODEL_PROVIDER);
@@ -269,6 +269,19 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
 
     // Assign to the exported CONFIG
     Object.assign(CONFIG, currentConfig);
+
+    // Critical invariant guard — catch dangerous config values at startup
+    if (CONFIG.SERVER_PORT !== 3000) {
+        logger.error(`[Config] CRITICAL: SERVER_PORT is ${CONFIG.SERVER_PORT}, expected 3000. Forcing to 3000.`);
+        CONFIG.SERVER_PORT = 3000;
+    }
+    if (CONFIG.SCHEDULED_HEALTH_CHECK?.startupRun === true) {
+        logger.error('[Config] CRITICAL: startupRun=true detected — this causes cascade 429 storms. Forcing to false.');
+        CONFIG.SCHEDULED_HEALTH_CHECK.startupRun = false;
+    }
+    if (CONFIG.PROMPT_LOG_MODE === 'file') {
+        logger.warn('[Config] PROMPT_LOG_MODE=file is active — disable after debugging to avoid disk fill.');
+    }
 
     // Initialize logger
     logger.initialize({
