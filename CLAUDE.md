@@ -20,6 +20,21 @@ AIClient2API is a Node.js proxy on `http://localhost:3000` that unifies all avai
 
 AIClient2API is an **account-rotation load-balancer** — a stateful proxy that manages credentials across 30 accounts (9 Antigravity + 14 Gemini CLI + 3 Kiro + 1 Codex + others) to maximize throughput and availability. It translates OpenAI, Anthropic, and Gemini request/response formats on the fly.
 
+## Cockpit Quota Tracking & Load-Balancing
+
+**Goal:** Implement a resilient, non-blocking Quota Tracking and Load-Balancing module that dynamically routes requests to the accounts with the most remaining quota, while keeping Cockpit OAuth sessions alive.
+
+**Core Integration Point:**
+`http://127.0.0.1:18081/report?token=C-Code-CLI-Model-API`
+
+This endpoint returns a plain-text Markdown table of accounts, models, and remaining quota percentages. Poll it on a sub-10-minute interval to both keep OAuth sessions alive and refresh the in-memory quota cache without blocking the main proxy thread.
+
+**Objectives:**
+1. **Session Keep-Alive:** Poll the Cockpit endpoint frequently enough (< 10 min) to prevent OAuth session expiration.
+2. **Quota Ingestion:** Parse the Markdown table response and store quota data in memory for instant synchronous lookup.
+3. **Smart Routing:** Expose a penalty scoring function to the load balancer — accounts/models near quota exhaustion receive heavy penalties; high-quota accounts are prioritized.
+4. **Filesystem Fallback:** If the Cockpit endpoint is unavailable, seamlessly fall back to reading `~/.antigravity_cockpit/accounts.json` and the individual account files under `~/.antigravity_cockpit/accounts/` to derive offline quota state.
+
 ## Non-Negotiable Rules
 1. **Port is 3000.** Never change `SERVER_PORT`.
 2. **`listModels()` is static & synchronous.** `src/providers/provider-models.js` MUST NOT use `await` or live API calls.
