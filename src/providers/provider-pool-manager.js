@@ -104,6 +104,7 @@ export class ProviderPoolManager {
         this.refreshQueues = Object.create(null); // 按 providerType 分组的队列
         // 缓冲队列机制：延迟5秒，去重后再执行刷新
         this.refreshBufferTimers = {}; // 按 providerType 分组的定时器
+        this.refreshBufferQueues = Object.create(null); // 按 providerType 分组的缓冲队列
         this.bufferDelay = options.globalConfig?.REFRESH_BUFFER_DELAY ?? 5000; // 默认5秒缓冲延迟
         this.refreshTaskTimeoutMs = options.globalConfig?.REFRESH_TASK_TIMEOUT_MS ?? 60000; // 默认60秒刷新超时
         

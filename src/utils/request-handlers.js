@@ -223,6 +223,33 @@ function _extractModelAndStreamInfo(req, requestBody, fromProvider) {
     return strategy.extractModelAndStreamInfo(req, requestBody);
 }
 
+/**
+ * Reconverts the original request body for a new provider during retry.
+ */
+async function _reconvertRequestBodyForRetry(retryContext, fromProvider, newProvider, CONFIG) {
+    if (!retryContext || !retryContext.originalRequestBody) {
+        return null;
+    }
+    let nextRequestBody = { ...retryContext.originalRequestBody };
+    
+    if (CONFIG._monitorRequestId) {
+        nextRequestBody._monitorRequestId = CONFIG._monitorRequestId;
+    }
+    if (CONFIG.requestBaseUrl) {
+        nextRequestBody._requestBaseUrl = CONFIG.requestBaseUrl;
+    }
+    
+    if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(newProvider)) {
+        logger.info(`[Retry Convert] Reconverting request from ${fromProvider} to ${newProvider}`);
+        nextRequestBody = convertData(nextRequestBody, 'request', fromProvider, newProvider);
+    }
+    
+    nextRequestBody = await _applySystemPromptFromFile(CONFIG, nextRequestBody, newProvider);
+    await _manageSystemPrompt(nextRequestBody, newProvider);
+    
+    return nextRequestBody;
+}
+
 async function _applySystemPromptFromFile(config, requestBody, toProvider) {
     const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(toProvider));
     return strategy.applySystemPromptFromFile(config, requestBody);
@@ -708,11 +735,16 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                     };
 
                     // 递归调用，使用新的服务
+                    let nextRequestBody = requestBody;
+                    if (retryContext && retryContext.originalRequestBody) {
+                        nextRequestBody = await _reconvertRequestBodyForRetry(retryContext, fromProvider, result.actualProviderType || toProvider, CONFIG) || requestBody;
+                    }
+
                     return await handleStreamRequest(
                         res,
                         result.service,
                         result.actualModel || model,
-                        requestBody,
+                        nextRequestBody,
                         fromProvider,
                         result.actualProviderType || toProvider,
                         PROMPT_LOG_MODE,
@@ -970,11 +1002,16 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                     };
 
                     // 递归调用，使用新的服务
+                    let nextRequestBody = requestBody;
+                    if (retryContext && retryContext.originalRequestBody) {
+                        nextRequestBody = await _reconvertRequestBodyForRetry(retryContext, fromProvider, result.actualProviderType || toProvider, CONFIG) || requestBody;
+                    }
+
                     return await handleUnaryRequest(
                         res,
                         result.service,
                         result.actualModel || model,
-                        requestBody,
+                        nextRequestBody,
                         fromProvider,
                         result.actualProviderType || toProvider,
                         PROMPT_LOG_MODE,

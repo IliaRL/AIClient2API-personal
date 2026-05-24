@@ -15,6 +15,7 @@ import {
 } from '../utils/provider-utils.js';
 import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 import { MODEL_PROVIDER } from '../utils/constants.js';
+import { PROVIDER_MODELS } from '../providers/provider-models.js';
 
 // 存储 ProviderPoolManager 实例
 let providerPoolManager = null;
@@ -416,7 +417,7 @@ async function _resolveEffectiveRouting(config, requestedModel) {
         // (see normalizeConfiguredProviders), so we must inspect DEFAULT_MODEL_PROVIDERS,
         // not just MODEL_PROVIDER, when running in cascade mode.
         else if (requestedModel.startsWith('claude-') && !requestedModel.includes(':') && effectiveProvider !== 'claude-kiro-oauth') {
-            const { PROVIDER_MODELS } = await import('../providers/provider-models.js');
+
             const cascade = Array.isArray(config.DEFAULT_MODEL_PROVIDERS) ? config.DEFAULT_MODEL_PROVIDERS : [];
             const inAutoOrCascade =
                 effectiveProvider === MODEL_PROVIDER.AUTO ||
@@ -465,7 +466,7 @@ async function _resolveEffectiveRouting(config, requestedModel) {
             effectiveProvider === MODEL_PROVIDER.AUTO ||
             cascade.length > 1;
         if (inAutoOrCascade) {
-            const { PROVIDER_MODELS } = await import('../providers/provider-models.js');
+
             const declaredBy = [];
             for (const providerType of Object.keys(PROVIDER_MODELS)) {
                 const models = PROVIDER_MODELS[providerType];
