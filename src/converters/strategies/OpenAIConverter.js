@@ -713,22 +713,6 @@ export class OpenAIConverter extends BaseConverter {
             }
         }
 
-        // 构建 tool_call_id -> response 映射
-        const toolResponses = {};
-        for (const message of messages) {
-            if (message.role === 'tool' && message.tool_call_id) {
-                toolResponses[message.tool_call_id] = message.content;
-            }
-            // Claude 格式：user content 数组中的 tool_result
-            if (message.role === 'user' && Array.isArray(message.content)) {
-                for (const item of message.content) {
-                    if (item && item.type === 'tool_result' && item.tool_use_id) {
-                        toolResponses[item.tool_use_id] = item.content;
-                    }
-                }
-            }
-        }
-
         const processedMessages = [];
         let systemInstruction = null;
 
@@ -823,6 +807,31 @@ export class OpenAIConverter extends BaseConverter {
                                     }
                                 }
                                 break;
+                            case 'tool_result': {
+                                // Anthropic-format tool result — convert to Gemini functionResponse.
+                                // This path is hit when requests arrive in Claude/Anthropic format
+                                // rather than being pre-converted to OpenAI role:tool messages.
+                                const fnName = tcID2Name[item.tool_use_id];
+                                if (fnName) {
+                                    let responseContent = item.content;
+                                    if (Array.isArray(responseContent)) {
+                                        responseContent = responseContent
+                                            .filter(c => c && c.type === 'text')
+                                            .map(c => c.text)
+                                            .join('');
+                                    }
+                                    if (typeof responseContent !== 'string') {
+                                        responseContent = JSON.stringify(responseContent);
+                                    }
+                                    node.parts.push({
+                                        functionResponse: {
+                                            name: fnName,
+                                            response: { result: responseContent }
+                                        }
+                                    });
+                                }
+                                break;
+                            }
                             case 'file':
                                 if (item.file) {
                                     const filename = item.file.filename || '';
@@ -884,7 +893,6 @@ export class OpenAIConverter extends BaseConverter {
                 const node = { role: 'model', parts: [] };
                 
                 // 处理文本内容
-                const functionCallIds = [];
                 if (typeof content === 'string' && content) {
                     node.parts.push({ text: content });
                 } else if (Array.isArray(content)) {
@@ -904,7 +912,6 @@ export class OpenAIConverter extends BaseConverter {
                                 },
                                 thoughtSignature: OpenAIConverter.GEMINI_OPENAI_THOUGHT_SIGNATURE
                             });
-                            if (fid) functionCallIds.push(fid);
                         } else if (item.type === 'image_url' && item.image_url) {
                             const imageUrl = typeof item.image_url === 'string'
                                 ? item.image_url
@@ -954,40 +961,12 @@ export class OpenAIConverter extends BaseConverter {
                             thoughtSignature: OpenAIConverter.GEMINI_OPENAI_THOUGHT_SIGNATURE
                         });
 
-                        if (fid) {
-                            functionCallIds.push(fid);
-                        }
                     }
                 }
 
                 // 添加 model 消息
                 if (node.parts.length > 0) {
                     processedMessages.push(node);
-                }
-
-                // 添加对应的 functionResponse（作为 user 消息）
-                if (functionCallIds.length > 0) {
-                    const toolNode = { role: 'user', parts: [] };
-                    for (const fid of functionCallIds) {
-                        const name = tcID2Name[fid];
-                        if (name) {
-                            let resp = toolResponses[fid] || '{}';
-                            if (typeof resp !== 'string') {
-                                resp = JSON.stringify(resp);
-                            }
-                            toolNode.parts.push({
-                                functionResponse: {
-                                    name: name,
-                                    response: {
-                                        result: resp
-                                    }
-                                }
-                            });
-                        }
-                    }
-                    if (toolNode.parts.length > 0) {
-                        processedMessages.push(toolNode);
-                    }
                 }
             } else if (role === 'tool') {
                 // 处理独立的 tool role 消息（OpenAI 格式）
@@ -1021,9 +1000,20 @@ export class OpenAIConverter extends BaseConverter {
             // 其他 role 类型跳过
         }
 
+        // Merge consecutive same-role nodes — Gemini requires strictly alternating user/model.
+        // Multiple tool messages each produce a separate user node; they must be merged into one.
+        const mergedMessages = [];
+        for (const node of processedMessages) {
+            if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === node.role) {
+                mergedMessages[mergedMessages.length - 1].parts.push(...node.parts);
+            } else {
+                mergedMessages.push({ role: node.role, parts: [...node.parts] });
+            }
+        }
+
         // 构建 Gemini 请求
         const geminiRequest = {
-            contents: processedMessages.filter(item => item.parts && item.parts.length > 0)
+            contents: mergedMessages.filter(item => item.parts && item.parts.length > 0)
         };
 
         // 添加 model
