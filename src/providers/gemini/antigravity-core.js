@@ -286,12 +286,19 @@ function geminiToAntigravity(modelName, payload, projectId) {
         delete template.request.safetySettings;
     }
 
-    // 对于 Claude 模型，设置特殊的工具模式
-    if (isClaudeModel && template.request.toolConfig) {
+    // For Claude models, ensure tool calling config is set to AUTO whenever tools are
+    // present. Without an explicit toolConfig the model acknowledges tool calls in text
+    // instead of returning a functionCall part.
+    // 'VALIDATED' is not a valid Gemini API value — it caused the model to acknowledge
+    // tasks but never execute tool calls, producing silent empty turns.
+    if (isClaudeModel && template.request.tools?.length) {
+        if (!template.request.toolConfig) {
+            template.request.toolConfig = {};
+        }
         if (!template.request.toolConfig.functionCallingConfig) {
             template.request.toolConfig.functionCallingConfig = {};
         }
-        template.request.toolConfig.functionCallingConfig.mode = 'VALIDATED';
+        template.request.toolConfig.functionCallingConfig.mode = 'AUTO';
     }
 
     // 以前这里会针对 Claude 模型删除 tools，现在为了支持工具调用已移除该限制
@@ -439,7 +446,9 @@ function convertStreamToNonStream(stream) {
         
         const text = pendingText;
         if (pendingKind === 'text') {
-            if (text.trim()) {
+            // Use length check, not trim() — trim silently drops '\n'-only streaming chunks
+            // from Claude models where content arrives as whitespace between substantive parts.
+            if (text.length > 0) {
                 parts.push({ text: text });
             }
         } else if (pendingKind === 'thought') {
@@ -1245,7 +1254,7 @@ export class AntigravityApiService {
                 // with remaining quota from being selected after one account was exhausted.
                 const isClaudeTier = typeof modelId === 'string' && modelId.startsWith('gemini-claude-');
                 if (poolManager && is403 && !isAccountFatal && isClaudeTier && !isStagingApiMissing && modelId && this.uuid) {
-                    const cooldownMs = 600000; // 10 min — Vertex passthrough denial is per-account, not global
+                    const cooldownMs = 120000; // 2 min — Vertex passthrough denial is per-account, not global
                     logger.warn(`[Antigravity] Claude-tier 403 for ${modelId} on account ${this.uuid} — cooling THIS account only (${cooldownMs}ms), others remain available.`);
                     if (typeof poolManager.markModelCooldownForAccount === 'function') {
                         poolManager.markModelCooldownForAccount(ptype, this.uuid, modelId, cooldownMs);
@@ -1282,6 +1291,14 @@ export class AntigravityApiService {
                         });
                         error.credentialMarkedUnhealthy = true;
                     }
+                }
+
+                // For staging-API-missing (known Google false-positive on verified-active accounts):
+                // try the next base URL before switching accounts — the non-sandbox URL
+                // (daily-cloudcode-pa.googleapis.com) does not require the staging API.
+                if (isStagingApiMissing && !isBootstrapMethod && baseURLIndex + 1 < this.baseURLs.length) {
+                    logger.info(`[Antigravity API] Staging endpoint ${baseURL} returned known false-positive — retrying on next base URL...`);
+                    return this.callApi(method, body, isRetry, retryCount, baseURLIndex + 1);
                 }
 
                 // Mark error for credential switch without recording error count
@@ -1416,7 +1433,7 @@ export class AntigravityApiService {
                 // with remaining quota from being selected after one account was exhausted.
                 const isClaudeTier = typeof modelId === 'string' && modelId.startsWith('gemini-claude-');
                 if (poolManager && is403 && !isAccountFatal && isClaudeTier && !isStagingApiMissing && modelId && this.uuid) {
-                    const cooldownMs = 600000; // 10 min — Vertex passthrough denial is per-account, not global
+                    const cooldownMs = 120000; // 2 min — short enough for 13-account pool to recover quickly
                     logger.warn(`[Antigravity] Claude-tier 403 for ${modelId} on account ${this.uuid} — cooling THIS account only (${cooldownMs}ms), others remain available.`);
                     if (typeof poolManager.markModelCooldownForAccount === 'function') {
                         poolManager.markModelCooldownForAccount(ptype, this.uuid, modelId, cooldownMs);
@@ -1449,6 +1466,15 @@ export class AntigravityApiService {
                         });
                         error.credentialMarkedUnhealthy = true;
                     }
+                }
+
+                // For staging-API-missing (known Google false-positive on verified-active accounts):
+                // try the next base URL before switching accounts — the non-sandbox URL
+                // (daily-cloudcode-pa.googleapis.com) does not require the staging API.
+                if (isStagingApiMissing && !isBootstrapMethod && baseURLIndex + 1 < this.baseURLs.length) {
+                    logger.info(`[Antigravity API] Staging endpoint ${baseURL} returned known false-positive during stream — retrying on next base URL...`);
+                    yield* this.streamApi(method, body, isRetry, retryCount, baseURLIndex + 1);
+                    return;
                 }
 
                 // Mark error for credential switch without recording error count
@@ -1565,8 +1591,14 @@ export class AntigravityApiService {
             }
         }
 
-        let selectedModel = model;
-        if (!this.availableModels.includes(model)) {
+        // Resolve user-friendly 3.5-flash aliases to their actual Antigravity API model IDs.
+        // "High" and "Medium" are cockpit display names — the real API IDs differ.
+        const FLASH_ALIASES_NON_STREAM = {
+            'gemini-3.5-flash-high':   'gemini-3-flash-agent',
+            'gemini-3.5-flash-medium': 'gemini-3.5-flash-low',
+        };
+        let selectedModel = FLASH_ALIASES_NON_STREAM[model] ?? model;
+        if (!this.availableModels.includes(selectedModel)) {
             logger.warn(`[Antigravity] Model '${model}' not found. Using default model: 'gemini-3-flash'`);
             selectedModel = 'gemini-3-flash';
         }
@@ -1601,7 +1633,7 @@ export class AntigravityApiService {
      */
     async executeClaudeNonStream(payload) {
         const chunks = [];
-        
+
         try {
             const stream = this.streamApi('streamGenerateContent', payload);
             for await (const chunk of stream) {
@@ -1609,10 +1641,23 @@ export class AntigravityApiService {
                     chunks.push(JSON.stringify(chunk));
                 }
             }
-            
+
+            // Surface provider errors (403/429/5xx return non-SSE bodies that the SSE
+            // parser skips entirely, leaving chunks empty) so LiteLLM can retry/fallback
+            // instead of receiving a silent 200 with empty content.
+            if (chunks.length === 0) {
+                throw new Error('[Antigravity] Claude stream returned no chunks — provider returned HTTP error or empty response');
+            }
+
             // 将流式响应转换为非流式响应
             const streamData = chunks.join('\n');
             const nonStreamResponse = convertStreamToNonStream(streamData);
+
+            const parts = nonStreamResponse?.response?.candidates?.[0]?.content?.parts;
+            if (!parts || parts.length === 0) {
+                logger.warn(`[Antigravity] Claude stream had ${chunks.length} chunk(s) but produced empty parts — first chunk: ${chunks[0]?.slice(0, 300)}`);
+            }
+
             return toGeminiApiResponse(nonStreamResponse.response);
         } catch (error) {
             logger.error('[Antigravity] Claude non-stream execution error:', error.message);
@@ -1644,8 +1689,13 @@ export class AntigravityApiService {
             }
         }
 
-        let selectedModel = model;
-        if (!this.availableModels.includes(model)) {
+        // Resolve user-friendly 3.5-flash aliases to their actual Antigravity API model IDs.
+        const FLASH_ALIASES_STREAM = {
+            'gemini-3.5-flash-high':   'gemini-3-flash-agent',
+            'gemini-3.5-flash-medium': 'gemini-3.5-flash-low',
+        };
+        let selectedModel = FLASH_ALIASES_STREAM[model] ?? model;
+        if (!this.availableModels.includes(selectedModel)) {
             logger.warn(`[Antigravity] Model '${model}' not found. Using default model: 'gemini-3-flash'`);
             selectedModel = 'gemini-3-flash';
         }
