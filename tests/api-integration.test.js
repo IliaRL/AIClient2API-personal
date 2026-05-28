@@ -493,6 +493,9 @@ describe('API Integration Tests with HTTP Requests', () => {
             const responseData = await response.json();
             expect(responseData).toHaveProperty('data');
             expect(Array.isArray(responseData.data)).toBe(true);
+            // Every entry must have a display_name starting with "Claude "
+            const missing = responseData.data.filter(m => !m.display_name?.startsWith('Claude '));
+            expect(missing).toHaveLength(0);
         });
 
         // npx jest ./tests/api-integration.test.js -t "OpenAI /v1/models OpenAI"
@@ -510,6 +513,8 @@ describe('API Integration Tests with HTTP Requests', () => {
             const responseData = await response.json();
             expect(responseData).toHaveProperty('data');
             expect(Array.isArray(responseData.data)).toBe(true);
+            const missing = responseData.data.filter(m => !m.display_name?.startsWith('Claude '));
+            expect(missing).toHaveLength(0);
         });
 
         // npx jest ./tests/api-integration.test.js -t "OpenAI /v1/models Claude"
@@ -527,6 +532,8 @@ describe('API Integration Tests with HTTP Requests', () => {
             const responseData = await response.json();
             expect(responseData).toHaveProperty('data');
             expect(Array.isArray(responseData.data)).toBe(true);
+            const missing = responseData.data.filter(m => !m.display_name?.startsWith('Claude '));
+            expect(missing).toHaveLength(0);
         });
 
         // To run this test:
@@ -545,6 +552,9 @@ describe('API Integration Tests with HTTP Requests', () => {
             const responseData = await response.json();
             expect(responseData).toHaveProperty('models');
             expect(Array.isArray(responseData.models)).toBe(true);
+            // Every Gemini-format entry must carry a displayName starting with "Claude "
+            const missing = responseData.models.filter(m => !m.displayName?.startsWith('Claude '));
+            expect(missing).toHaveLength(0);
         });
     });
 

@@ -98,7 +98,7 @@ function getCustomModelEntriesForProvider(config, providerType = null, options =
     return entries;
 }
 
-function buildFriendlyDisplayName(modelId, providerType) {
+export function buildFriendlyDisplayName(modelId, providerType) {
     const friendly = (modelId || '')
         .replace(/(\d+)[.-](\d+)/g, '$1.$2')
         .split(/[-/:]+/)
