@@ -874,7 +874,10 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
 
         // Response cache check — only on initial (non-retry) unary requests.
         // Prevents quota drain when identical requests are retried or duplicated within 30s.
-        const _cacheKey = currentRetry === 0 ? getCacheKey(requestBody, model) : null;
+        // Prefix with fromProvider protocol so OpenAI and Gemini callers never share a cache entry
+        // (they expect different response formats for the same model/content).
+        const _baseCacheKey = currentRetry === 0 ? getCacheKey(requestBody, model) : null;
+        const _cacheKey = _baseCacheKey ? `${getProtocolPrefix(fromProvider)}:${_baseCacheKey}` : null;
         if (_cacheKey) {
             const cached = getCache(_cacheKey);
             if (cached) {
@@ -909,6 +912,15 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         if (needsConversion) {
             logger.info(`[Response Convert] Converting response from ${toProvider} to ${fromProvider}`);
             clientResponse = convertData(nativeResponse, 'response', toProvider, fromProvider, model);
+        } else if (
+            getProtocolPrefix(fromProvider) === MODEL_PROTOCOL_PREFIX.GEMINI &&
+            nativeResponse?.choices !== undefined
+        ) {
+            // Gemini endpoint (/v1beta/) but backend returned OpenAI-format response.
+            // This occurs because gemini-* providers normalise output to OpenAI format internally,
+            // causing the prefix-equality check above to skip conversion. Convert explicitly.
+            logger.info(`[Response Convert] Gemini endpoint received OpenAI response — converting to native Gemini format`);
+            clientResponse = convertData(nativeResponse, 'response', MODEL_PROTOCOL_PREFIX.OPENAI, MODEL_PROTOCOL_PREFIX.GEMINI, model);
         }
 
         // 监控钩子：非流式响应
