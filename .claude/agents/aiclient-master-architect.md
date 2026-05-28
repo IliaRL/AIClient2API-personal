@@ -32,10 +32,23 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 
 ---
 
-## Current Verified Baseline (2026-05-22)
+## Current Verified Baseline (2026-05-28)
 
-- **80 models across 10 active providers** — all verified live
-- **34 pool accounts** (14 gemini-cli-oauth + 13 gemini-antigravity + 3 claude-kiro-oauth + 1 each: nvidia-nim, github-models, openai-codex-oauth, openai-custom)
+- **112 models across 8+ active providers** — verified live via `/v1/models`
+- **73 tests passing** — `cd ~/AIClient2API && pnpm test` (8 suites, unit + integration)
+- **33 pool accounts** (13 gemini-cli-oauth + 13 gemini-antigravity + 3 claude-kiro-oauth + 1 each: nvidia-nim, github-models, openai-codex-oauth, openai-custom)
+- **2026-05-28 changes:**
+  - Phase 01 complete: Gemini 1M context injection, false), Kiro multi-beta header forwarding (tools/caching/thinking), OpenAIConverter blockStarted dedup fix (REQ-03)
+  - Tier 2 (LiteLLM :4000) restored to active request path — ANTHROPIC_BASE_URL=http://127.0.0.1:4000
+  - Response cache key isolation: `${protocol}:${sha256hash}` prevents OpenAI/Gemini cross-contamination
+  - Gemini /v1beta/ native endpoint: request-handlers.js detects protocol collision, converts via OpenAIConverter.toGeminiResponse()
+  - Model list cache: getCachedAvailableModels() 30s TTL, invalidated on health changes
+  - Model catalog: deduped kiro dot-variants, removed `auto`, 116→112 models
+  - validate-skills.sh: 62/62 assertions passing (updated line 75: updateLastModelFile unary handler 951→963)
+- **2026-05-26 changes:**
+  - NVIDIA NIM: dropped 4 slow-cold-start models (llama-3.3-70b, kimi-k2.6, minimax-m2.7, deepseek-v4-pro); added/kept 8 fast-warm models. `checkModelName` → `meta/llama-3.2-3b-instruct` (0.51s end-to-end).
+  - Antigravity: fixed second-turn-empty bug — `OpenAIConverter.js` now preserves `tool_call.id` on Gemini `functionCall` + `functionResponse` parts (required by Vertex-Claude bridge). Regression test added in `tests/unit/openai-converter-tool-use.test.js`. 13/13 unit tests pass.
+  - GitHub Models: demoted from primary fallback chains (still reachable as last-resort), `SOFT_LIMIT` tightened 120KB → 30KB at `src/providers/openai/openai-core.js:97` so synthetic 413 fires before round-trip. Free-tier caps at ~8K input regardless of model context.
 - **Cockpit quota routing (2026-05-20)**: `src/utils/cockpit-quota.js` — singleton polls `http://127.0.0.1:18081/report` every 10 min; injects `(100 - remaining%) × 1e9` penalty into `_calculateNodeScore()` per account+model. File fallback to `~/.antigravity_cockpit/accounts/`. Accounts at 0% quota sink to bottom of sort order; never removed.
 - **Warmup sort optimization (2026-05-20)**: Precomputes `minSeqInPool` and `now` once before the warmup sort loop instead of O(n) re-scan per comparison.
 - **Staging-API fix 2026-05-19e**: 403 "Gemini for Google Cloud API (Staging) has not been used in project" applies 24h per-account model cooldown instead of marking account dead.
