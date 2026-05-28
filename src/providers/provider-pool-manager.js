@@ -44,6 +44,21 @@ function getCustomModelIdsForProvider(config, providerType) {
 }
 
 /**
+ * Detect whether a model fallback crosses a model family boundary (e.g. Claude → Gemini).
+ * Used to emit a prominent warning when modelFallbackMapping downgrades across families.
+ * @param {string} fromModel
+ * @param {string} toModel
+ * @returns {boolean}
+ */
+function _isCrossFamilyDowngrade(fromModel, toModel) {
+    if (!fromModel || !toModel) return false;
+    const isClaude = (m) => m.toLowerCase().includes('claude');
+    const isGemini = (m) => m.toLowerCase().includes('gemini');
+    // Cross-family if one is Claude and the other is not, or one is Gemini and the other is not
+    return isClaude(fromModel) !== isClaude(toModel) || isGemini(fromModel) !== isGemini(toModel);
+}
+
+/**
  * Manages a pool of API service providers, handling their health and selection.
  */
 export class ProviderPoolManager {
@@ -840,6 +855,7 @@ export class ProviderPoolManager {
                         providerConfig.lastUsed = null;
                         providerConfig.usageCount = 0;
                         providerConfig.errorCount = 0;
+                        providerConfig.modelCooldowns = {};
                         // providerConfig.lastErrorTime = null;
                         // providerConfig.lastErrorMessage = null;
                     } else if (syncFromConfig) {
@@ -1459,13 +1475,19 @@ export class ProviderPoolManager {
                 if (triedModels.has(requestedModel)) {
                     this._log('warn', `Model Fallback cycle detected for ${requestedModel} — skipping`);
                 } else {
-                    this._log('info', `Trying Model Fallback Mapping for ${requestedModel}: -> ${targetProviderType} (${targetModel})`);
+                    // Detect cross-family downgrades: warn loudly when Claude ↔ non-Claude boundary is crossed.
+                    const isModelDowngrade = _isCrossFamilyDowngrade(requestedModel, targetModel);
+                    if (isModelDowngrade) {
+                        this._log('warn', `[Fallback] ⚠️  Model family downgrade: "${requestedModel}" → "${targetModel}" (${targetProviderType}). All ${requestedModel} providers exhausted.`);
+                    } else {
+                        this._log('info', `Trying Model Fallback Mapping for ${requestedModel}: -> ${targetProviderType} (${targetModel})`);
+                    }
                     triedModels.add(requestedModel);
                     // Recurse fully — lets the target model follow its own chain and modelFallbackMapping entries
                     const result = await this.selectProviderWithFallback(targetProviderType, targetModel, { ...options, _triedModels: triedModels });
                     if (result) {
                         this._log('info', `Fallback activated (Model Mapping): ${providerType} (${requestedModel}) -> ${result.actualProviderType} (${result.actualModel})`);
-                        return { ...result, isFallback: true };
+                        return { ...result, isFallback: true, isModelDowngrade };
                     }
                 }
             }
@@ -1610,11 +1632,37 @@ export class ProviderPoolManager {
                 }
 
                 for (const model of models) {
-                    allModels.push({
+                    const isClaudeProvider = /^(claude|anthropic)/i.test(providerType);
+                    const entry = {
                         id: `${providerType}:${model}`,
                         provider: providerType,
                         model: model
-                    });
+                    };
+                    if (isClaudeProvider) {
+                        // Generate a friendly display name for Claude providers.
+                        // "claude-kiro-oauth" -> "kiro", "claude-antigravity" -> "antigravity"
+                        const providerShort = providerType.replace(/^claude-/i, '').replace(/-oauth$/i, '');
+                        // "claude-opus-4-7" -> "Claude Opus 4.7", "claude-sonnet-4-6-thinking" -> "Claude Sonnet 4.6 Thinking"
+                        const friendlyModel = model
+                            .replace(/(\d+)-(\d+)/g, '$1.$2')
+                            .split('-')
+                            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(' ');
+                        entry.display_name = `${friendlyModel} (${providerShort})`;
+                    }
+                    allModels.push(entry);
+                    // Claude Code's /model picker filters to /^(claude|anthropic)/i.
+                    // Emit a claude-prefixed alias so non-Claude providers appear in the picker.
+                    // The alias routes back to the real provider via claude- prefix stripping
+                    // in service-manager._resolveEffectiveRouting.
+                    if (!isClaudeProvider) {
+                        allModels.push({
+                            id: `claude-${providerType}:${model}`,
+                            display_name: `[${providerType}] ${model}`,
+                            provider: providerType,
+                            model: model
+                        });
+                    }
                 }
             }
         }
@@ -1633,7 +1681,8 @@ export class ProviderPoolManager {
                     id: m.id,
                     object: "model",
                     created: Math.floor(Date.now() / 1000),
-                    owned_by: m.provider
+                    owned_by: m.provider,
+                    ...(m.display_name ? { display_name: m.display_name } : {})
                 }))
             };
         } else if (endpointType === ENDPOINT_TYPE.GEMINI_MODEL_LIST) {
