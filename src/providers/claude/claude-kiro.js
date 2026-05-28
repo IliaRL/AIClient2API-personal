@@ -1715,21 +1715,42 @@ You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer t
         const requestData = await this.buildCodewhispererRequest(messages, model, body.tools, body.system, body.thinking);
 
         try {
+            // Proactively refresh if access token is expired to avoid misclassified 402s
+            if (this.expiresAt && new Date(this.expiresAt) <= new Date()) {
+                logger.info('[Kiro] Access token expired, attempting proactive refresh before request...');
+                try {
+                    const tokenFilePath = this.credsFilePath || path.join(this.credPath, KIRO_AUTH_TOKEN_FILE);
+                    await this._doTokenRefresh(this.saveCredentialsToFile.bind(this), tokenFilePath);
+                    logger.info('[Kiro] Proactive token refresh succeeded');
+                } catch (refreshError) {
+                    logger.warn('[Kiro] Proactive refresh failed, proceeding with existing token:', refreshError.message);
+                }
+            }
+
             const token = this.accessToken; // Use the already initialized token
             const headers = {
                 'Authorization': `Bearer ${token}`,
                 'amz-sdk-invocation-id': `${uuidv4()}`,
             };
 
-            // Detect if prompt caching is being used
+            // Build anthropic-beta header from request body signals
+            const betaValues = [];
+            if (body.tools && Array.isArray(body.tools) && body.tools.length > 0) {
+                betaValues.push('tools-2024-04-04');
+            }
             const hasCacheControl = body.messages?.some(m =>
                 Array.isArray(m.content) && m.content.some(c => c.cache_control)
             ) || (Array.isArray(body.system) && body.system.some(c => c.cache_control));
-
             if (hasCacheControl) {
+                betaValues.push('prompt-caching-2024-07-31');
+            }
+            if (body.thinking && typeof body.thinking === 'object') {
+                betaValues.push('interleaved-thinking-2025-05-14');
+            }
+            if (betaValues.length > 0) {
                 const betaHeader = model.startsWith('amazonq') ? 'x-amzn-kiro-amazonq-beta' : 'anthropic-beta';
-                headers[betaHeader] = 'prompt-caching-2024-07-31';
-                logger.info(`[Kiro] Enabling Prompt Caching beta header for ${model}`);
+                headers[betaHeader] = betaValues.join(',');
+                logger.info(`[Kiro] Beta headers: ${betaValues.join(',')} for ${model}`);
             }
 
             // 当 model 以 kiro-amazonq 开头时，使用 amazonQUrl，否则使用 baseUrl
@@ -2015,21 +2036,36 @@ You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer t
      * @private
      */
     async _handle402Error(error, context = 'unknown') {
+        // If the access token was already expired, this 402 is an auth failure — not quota exhaustion
+        if (this.expiresAt && new Date(this.expiresAt) <= new Date()) {
+            logger.info(`[Kiro] 402 in ${context} but access token is expired — treating as auth error, not quota exhaustion`);
+            this._markCredentialNeedRefresh(`402 with expired token in ${context}`);
+            error.shouldSwitchCredential = true;
+            error.skipErrorCount = true;
+            throw error;
+        }
+
         logger.info(`[Kiro] Received 402 (Quota Exceeded) in ${context}. Verifying usage limits...`);
         try {
             // Verify usage limits to confirm quota exhaustion
             const usageLimits = await this.getUsageLimits();
-            const isQuotaExhausted = usageLimits?.usedCount >= usageLimits?.limitCount;
-            
-            logger.info(`[Kiro] Quota confirmed exhausted: ${usageLimits?.usedCount}/${usageLimits?.limitCount}`);
-            // Calculate recovery time: 1st day of next month at 00:00:00 UTC
-            const nextMonth = this._getNextMonthFirstDay();
-            this._markCredentialUnhealthyWithRecovery('402 Payment Required - Quota Exhausted', error, nextMonth);
+            const breakdown = usageLimits?.usageBreakdownList?.[0];
+            const isQuotaExhausted = breakdown ? breakdown.currentUsage >= breakdown.usageLimit : false;
+            logger.info(`[Kiro] Usage: ${breakdown?.currentUsage}/${breakdown?.usageLimit}, exhausted=${isQuotaExhausted}`);
+
+            if (isQuotaExhausted) {
+                // Confirmed quota exhaustion — mark unhealthy until next month reset
+                const nextMonth = this._getNextMonthFirstDay();
+                this._markCredentialUnhealthyWithRecovery('402 Payment Required - Quota Exhausted', error, nextMonth);
+            } else {
+                // 402 but quota not exhausted — treat as transient auth error and rotate
+                logger.info(`[Kiro] 402 received but quota not exhausted — rotating credential`);
+                this._markCredentialNeedRefresh(`402 in ${context} with quota available — rotating`);
+            }
         } catch (usageError) {
             logger.warn('[Kiro] Failed to verify usage limits:', usageError.message);
-            // If we can't verify, still mark as unhealthy with recovery time
-            const nextMonth = this._getNextMonthFirstDay();
-            this._markCredentialUnhealthyWithRecovery('402 Payment Required - Quota Exceeded (unverified)', error, nextMonth);
+            // Cannot confirm quota — rotate to next credential rather than blocking until next month
+            this._markCredentialNeedRefresh(`402 in ${context} — usage check failed, rotating`);
         }
         // Mark error for credential switch without recording error count
         error.shouldSwitchCredential = true;
@@ -2288,15 +2324,24 @@ You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer t
             'amz-sdk-invocation-id': `${uuidv4()}`,
         };
 
-        // Detect if prompt caching is being used
+        // Build anthropic-beta header from request body signals
+        const betaValues = [];
+        if (body.tools && Array.isArray(body.tools) && body.tools.length > 0) {
+            betaValues.push('tools-2024-04-04');
+        }
         const hasCacheControl = body.messages?.some(m =>
             Array.isArray(m.content) && m.content.some(c => c.cache_control)
         ) || (Array.isArray(body.system) && body.system.some(c => c.cache_control));
-
         if (hasCacheControl) {
+            betaValues.push('prompt-caching-2024-07-31');
+        }
+        if (body.thinking && typeof body.thinking === 'object') {
+            betaValues.push('interleaved-thinking-2025-05-14');
+        }
+        if (betaValues.length > 0) {
             const betaHeader = model.startsWith('amazonq') ? 'x-amzn-kiro-amazonq-beta' : 'anthropic-beta';
-            headers[betaHeader] = 'prompt-caching-2024-07-31';
-            logger.info(`[Kiro] Enabling Prompt Caching beta header for ${model} (stream)`);
+            headers[betaHeader] = betaValues.join(',');
+            logger.info(`[Kiro] Beta headers: ${betaValues.join(',')} for ${model} (stream)`);
         }
 
         const requestUrl = model.startsWith('amazonq') ? this.amazonQUrl : this.baseUrl;

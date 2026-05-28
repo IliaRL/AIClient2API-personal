@@ -16,7 +16,9 @@ import { fetch, getGlobalDispatcher } from 'undici';
 
 // Test server configuration
 const TEST_SERVER_BASE_URL = process.env.TEST_SERVER_BASE_URL || 'http://127.0.0.1:3000';
-const TEST_API_KEY = process.env.TEST_API_KEY || 'sk-a60f3efdf9b97e63c84ab4a3583f9d1c';
+// Auth token for the local proxy — sourced from env only (no hardcoded fallback).
+// Set AICLIENT_TOKEN (from dotfiles/zsh/zshrc) or TEST_API_KEY before running.
+const TEST_API_KEY = process.env.TEST_API_KEY || process.env.AICLIENT_TOKEN;
 const MODEL_PROVIDER = {
     // Model provider constants
     GEMINI_CLI: 'gemini-cli-oauth',
@@ -164,13 +166,12 @@ describe('API Integration Tests with HTTP Requests', () => {
         // To run this test:
         // npx jest ./tests/api-integration.test.js -t "OpenAI /v1/chat/completions non-streaming with OpenAI provider"
         test('OpenAI /v1/chat/completions non-streaming with OpenAI provider', async () => {
-            REAL_TEST_DATA.openai.nonStreamRequest.model = "openai-custom:deepseek/deepseek-v4-flash:free";
             const response = await makeRequest(
                 `${TEST_SERVER_BASE_URL}/v1/chat/completions`,
                 'POST',
                 'bearer',
                 { 'model-provider': MODEL_PROVIDER.OPENAI_CUSTOM },
-                REAL_TEST_DATA.openai.nonStreamRequest
+                { ...REAL_TEST_DATA.openai.nonStreamRequest, model: "openai-custom:deepseek/deepseek-v4-flash:free" }
             );
 
             // OpenRouter is a single-account provider — accept 200 (success) or 500/503 (rate-limited cooldown)
@@ -189,13 +190,12 @@ describe('API Integration Tests with HTTP Requests', () => {
         // To run this test:
         // npx jest ./tests/api-integration.test.js -t "OpenAI /v1/chat/completions streaming with OpenAI provider"
         test('OpenAI /v1/chat/completions streaming with OpenAI provider', async () => {
-            REAL_TEST_DATA.openai.streamRequest.model = "openai-custom:deepseek/deepseek-v4-flash:free";
             const response = await makeRequest(
                 `${TEST_SERVER_BASE_URL}/v1/chat/completions`,
                 'POST',
                 'bearer',
                 { 'model-provider': MODEL_PROVIDER.OPENAI_CUSTOM },
-                REAL_TEST_DATA.openai.streamRequest
+                { ...REAL_TEST_DATA.openai.streamRequest, model: "openai-custom:deepseek/deepseek-v4-flash:free" }
             );
 
             // OpenRouter is a single-account provider — accept 200 (success) or 500/503 (rate-limited cooldown)
@@ -228,13 +228,12 @@ describe('API Integration Tests with HTTP Requests', () => {
         // To run this test:
         // npx jest ./tests/api-integration.test.js -t "OpenAI /v1/chat/completions non-streaming with Claude provider"
         test('OpenAI /v1/chat/completions non-streaming with Claude provider', async () => {
-            REAL_TEST_DATA.claude.nonStreamRequest.model = "claude-sonnet-4-6";
             const response = await makeRequest(
                 `${TEST_SERVER_BASE_URL}/v1/chat/completions`,
                 'POST',
                 'bearer',
                 { 'model-provider': MODEL_PROVIDER.CLAUDE_CUSTOM },
-                REAL_TEST_DATA.claude.nonStreamRequest
+                { ...REAL_TEST_DATA.claude.nonStreamRequest, model: "claude-sonnet-4-6" }
             );
 
             expect(response.status).toBe(200);
@@ -251,13 +250,12 @@ describe('API Integration Tests with HTTP Requests', () => {
         // To run this test:
         // npx jest ./tests/api-integration.test.js -t "OpenAI /v1/chat/completions streaming with Claude provider"
         test('OpenAI /v1/chat/completions streaming with Claude provider', async () => {
-            REAL_TEST_DATA.claude.nonStreamRequest.model = "claude-sonnet-4-6";
             const response = await makeRequest(
                 `${TEST_SERVER_BASE_URL}/v1/chat/completions`,
                 'POST',
                 'bearer',
                 { 'model-provider': MODEL_PROVIDER.CLAUDE_CUSTOM },
-                REAL_TEST_DATA.claude.streamRequest
+                { ...REAL_TEST_DATA.claude.streamRequest, model: "claude-sonnet-4-6" }
             );
 
             expect(response.status).toBe(200);
@@ -357,13 +355,12 @@ describe('API Integration Tests with HTTP Requests', () => {
         // To run this test:
         // npx jest ./tests/api-integration.test.js -t "Claude Kiro /v1/messages non-streaming"
         test('Claude Kiro /v1/messages non-streaming', async () => {
-            REAL_TEST_DATA.claude.nonStreamRequest.model = "claude-sonnet-4-6";
             const response = await makeRequest(
                 `${TEST_SERVER_BASE_URL}/v1/messages`,
                 'POST',
                 'anthropic',
                 { 'model-provider': MODEL_PROVIDER.KIRO_API },
-                REAL_TEST_DATA.claude.nonStreamRequest
+                { ...REAL_TEST_DATA.claude.nonStreamRequest, model: "claude-sonnet-4-6" }
             );
 
             expect(response.status).toBe(200);
@@ -379,13 +376,12 @@ describe('API Integration Tests with HTTP Requests', () => {
         // To run this test:
         // npx jest ./tests/api-integration.test.js -t "Claude Kiro /v1/messages streaming"
         test('Claude Kiro /v1/messages streaming', async () => {
-            REAL_TEST_DATA.claude.streamRequest.model = "claude-sonnet-4-6";
             const response = await makeRequest(
                 `${TEST_SERVER_BASE_URL}/v1/messages`,
                 'POST',
                 'anthropic',
                 { 'model-provider': MODEL_PROVIDER.KIRO_API },
-                REAL_TEST_DATA.claude.streamRequest
+                { ...REAL_TEST_DATA.claude.streamRequest, model: "claude-sonnet-4-6" }
             );
 
             expect(response.status).toBe(200);

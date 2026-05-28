@@ -497,7 +497,14 @@ export class OpenAIConverter extends BaseConverter {
         const stateKey = _stateKeyRaw || 'default';
 
         if (!this.streamParams.has(stateKey)) {
+            // Sweep entries older than 5 minutes on each new stream registration to
+            // recover memory from streams that terminated without a finish_reason chunk.
+            const staleThreshold = Date.now() - 5 * 60 * 1000;
+            for (const [k, v] of this.streamParams) {
+                if (v.createdAt < staleThreshold) this.streamParams.delete(k);
+            }
             this.streamParams.set(stateKey, {
+                createdAt: Date.now(),
                 messageStarted: false,
                 blockStarted: false,
                 currentBlockType: null, // 'text' | 'tool_use' | 'thinking'
