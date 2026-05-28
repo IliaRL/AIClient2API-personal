@@ -60,15 +60,23 @@ export const PROVIDER_MODELS = Object.assign(Object.create(null), {
         'gemini-3-flash',
         'gemini-3.1-pro-high',
         'gemini-3.1-pro-low',
-        // Upstream merge 2026-05-21: new gemini-3.5-flash variants
+        // Antigravity 3.5 Flash tiers — cockpit display names map to these API model IDs:
+        //   "Gemini 3.5 Flash (High)"   → gemini-3-flash-agent   (already listed above)
+        //   "Gemini 3.5 Flash (Medium)" → gemini-3.5-flash-low
+        //   "Gemini 3.5 Flash (Low)"    → gemini-3.5-flash-extra-low
+        // Friendly aliases so /model picker shows intuitive names (resolved in antigravity-core.js):
+        'gemini-3.5-flash-extra-low',
         'gemini-3.5-flash-low',
-        'gemini-3.5-flash-high',
+        'gemini-3.5-flash-medium',   // alias → gemini-3.5-flash-low
+        'gemini-3.5-flash-high',     // alias → gemini-3-flash-agent
         'gemini-claude-sonnet-4-6',
         'gemini-claude-opus-4-6-thinking',
         // Live-verified 2026-05-21: excluded models confirmed working
         'gemini-3.1-flash-image',
         'gemini-3-flash-agent',
         'gemini-2.5-flash-thinking',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
     ],
     'claude-custom': [],
     'claude-kiro-oauth': [
@@ -89,14 +97,10 @@ export const PROVIDER_MODELS = Object.assign(Object.create(null), {
         'claude-opus-4-5-20251101',
         'claude-opus-4-6',
         'claude-opus-4-7',
-        // Auto + third-party models available via Kiro
-        'auto',
-        'deepseek-3.2',
+        // Third-party models available via Kiro (dot-variants removed — display transform handles dots)
         'deepseek-3-2',
-        'minimax-m2.5',
         'minimax-m2-5',
         'glm-5',
-        'minimax-m2.1',
         'minimax-m2-1',
         'qwen3-coder-next',
     ],
@@ -167,13 +171,17 @@ export const PROVIDER_MODELS = Object.assign(Object.create(null), {
         // deepseek-ai/deepseek-r1-0528, google/gemma-3-27b-it,
         // moonshotai/kimi-k2-instruct, nvidia/llama-3.3-nemotron-super-49b)
         // 404/410 on this key and were removed.
-        'nvidia/llama-3.3-nemotron-super-49b-v1.5',
-        'nvidia/llama-3.3-nemotron-super-49b-v1',
+        // Reduced 2026-05-26: removed kimi-k2.6, llama-3.3-70b-instruct,
+        // minimax-m2.7, deepseek-v4-pro due to cold-start latency >30s.
+        // Re-ordered fastest-first for routing performance.
+        'meta/llama-3.2-3b-instruct',
         'meta/llama-4-maverick-17b-128e-instruct',
-        'meta/llama-3.3-70b-instruct',
-        'moonshotai/kimi-k2.6',
+        'nvidia/llama-3.3-nemotron-super-49b-v1',
+        'nvidia/llama-3.3-nemotron-super-49b-v1.5',
+        'openai/gpt-oss-20b',
+        'openai/gpt-oss-120b',
         'mistralai/mistral-small-4-119b-2603',
-        'openai/gpt-oss-120b'
+        'mistralai/mistral-large-3-675b-instruct-2512'
     ],
     'forward-api': [],
     'grok-web': [
@@ -286,7 +294,8 @@ export function getConfiguredSupportedModels(providerType, providerConfig = {}) 
         return [];
     }
 
-    return normalizeModelIds(providerConfig?.supportedModels);
+    const models = normalizeModelIds(providerConfig?.supportedModels);
+    return models.slice(0, 15);
 }
 
 /**

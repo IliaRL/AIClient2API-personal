@@ -735,6 +735,7 @@ export class ProviderPoolManager {
         
         // 广播健康状态变化事件
         broadcastEvent('health_status_change', logEntry);
+        this.invalidateModelsCache();
     }
 
     /**
@@ -1656,9 +1657,15 @@ export class ProviderPoolManager {
                     // The alias routes back to the real provider via claude- prefix stripping
                     // in service-manager._resolveEffectiveRouting.
                     if (!isClaudeProvider) {
+                        const providerShort = providerType.replace(/-oauth$/i, '');
+                        const friendlyModel = model
+                            .replace(/(\d+)[.-](\d+)/g, '$1.$2')
+                            .split(/[-/]/)
+                            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(' ');
                         allModels.push({
                             id: `claude-${providerType}:${model}`,
-                            display_name: `[${providerType}] ${model}`,
+                            display_name: `${friendlyModel} (${providerShort})`,
                             provider: providerType,
                             model: model
                         });
@@ -1701,6 +1708,28 @@ export class ProviderPoolManager {
         
         // 默认返回空列表
         return { data: [] };
+    }
+
+    /**
+     * Cached wrapper around getAllAvailableModels.
+     * Returns a fresh list at most once every 30 seconds; invalidated on health changes.
+     */
+    async getCachedAvailableModels(endpointType = null) {
+        const now = Date.now();
+        const cacheKey = endpointType || '__raw__';
+        if (!this._modelsCache) this._modelsCache = Object.create(null);
+        const cached = this._modelsCache[cacheKey];
+        if (cached && (now - cached.ts) < 30_000) {
+            return cached.data;
+        }
+        const data = await this.getAllAvailableModels(endpointType);
+        this._modelsCache[cacheKey] = { data, ts: now };
+        return data;
+    }
+
+    /** Invalidate the models list cache (called on pool health changes). */
+    invalidateModelsCache() {
+        this._modelsCache = Object.create(null);
     }
 
     /**

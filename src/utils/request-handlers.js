@@ -10,6 +10,7 @@ import { ProviderStrategyFactory } from './provider-strategies.js';
 import { getPluginManager } from '../core/plugin-manager.js';
 import { MODEL_MAX_OUTPUT_TOKENS, MODEL_CONTEXT_WINDOWS, GEMINI_DEFAULT_MAX_TOKENS } from '../converters/utils.js';
 import { MODEL_PROTOCOL_PREFIX, MODEL_PROVIDER } from './constants.js';
+import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import {
     handleUnifiedResponse,
     getClientIp,
@@ -31,6 +32,7 @@ import {
 } from '../providers/provider-models.js';
 import { handleError, createErrorResponse, createStreamErrorResponse } from './error-handling.js';
 import { recordFallbackStep, isReasoningModel, isThinkingEnabled } from './trace-buffer.js';
+import { getCacheKey, getCache, setCache } from './response-cache.js';
 
 /**
  * Retrieve the active diagnostic trace from CONFIG, if present.
@@ -315,7 +317,7 @@ function _applyCustomModelParameters(requestBody, customConfig, provider) {
  * Updates a temporary file with the ID of the last model used.
  * Used for accurate shell statusline reporting.
  */
-export async function updateLastModelFile(model, provider = null, customName = null, requestedModel = null) {
+export async function updateLastModelFile(model, provider = null, customName = null, requestedModel = null, trace = null) {
     try {
         // Strip OpenRouter-style variant suffixes like :free, :nitro, :beta
         // e.g. "openai/gpt-oss-120b:free" -> "openai/gpt-oss-120b"
@@ -329,10 +331,19 @@ export async function updateLastModelFile(model, provider = null, customName = n
             provider: provider || null,
             customName: customName || null,
             requestedModel: requestedModel || null,
+            // Diagnostic fields sourced from per-request trace (null when no trace available)
+            latencyMs: trace?.totalUpstreamMs ?? null,
+            ttftMs: trace?.upstreamTTFTMs ?? null,
+            fallbackCount: trace?.fallbackCount ?? 0,
+            isDowngrade: Array.isArray(trace?.fallbackSteps) && trace.fallbackSteps.some(s => s.isModelDowngrade === true),
+            finalProvider: trace?.provider ?? provider ?? null,
+            inputTokens: trace?.inputTokens ?? null,
+            outputTokens: trace?.outputTokens ?? null,
         });
         const tmpPath = '/tmp/aiclient_last_model.tmp';
         await fs.writeFile(tmpPath, payload);
         await fs.rename(tmpPath, '/tmp/aiclient_last_model');
+        broadcastEvent('request_complete', JSON.parse(payload));
     } catch (err) {
         // Silently ignore errors
     }
@@ -451,6 +462,18 @@ export async function handleStreamRequest(res, service, model, requestBody, from
             const chunkText = extractResponseText(nativeChunk, toProvider);
             if (chunkText && !Array.isArray(chunkText)) {
                 fullResponseText += chunkText;
+            }
+
+            // Capture token usage from native chunk for status line reporting.
+            // Claude: message_start carries input_tokens; message_delta carries final output_tokens.
+            // OpenAI: final chunk may carry usage.prompt_tokens / usage.completion_tokens.
+            if (_trace && nativeChunk) {
+                const msgUsage = nativeChunk.message?.usage;           // Claude message_start
+                const deltaUsage = nativeChunk.usage;                  // Claude message_delta or OpenAI
+                if (msgUsage?.input_tokens != null)  _trace.inputTokens  = msgUsage.input_tokens;
+                if (deltaUsage?.output_tokens != null) _trace.outputTokens = deltaUsage.output_tokens;
+                if (deltaUsage?.prompt_tokens != null)     _trace.inputTokens  = deltaUsage.prompt_tokens;
+                if (deltaUsage?.completion_tokens != null) _trace.outputTokens = deltaUsage.completion_tokens;
             }
 
             // Convert the complete chunk object to the client's format (fromProvider), if necessary.
@@ -576,7 +599,7 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                 uuid: pooluuid
             });
             // Update last model file for statusline accuracy
-            updateLastModelFile(model, toProvider, customName, retryContext?.originalModel || null);
+            updateLastModelFile(model, toProvider, customName, retryContext?.originalModel || null, _trace);
         }
         // Record total upstream time on success.
         if (_trace) {
@@ -638,10 +661,16 @@ export async function handleStreamRequest(res, service, model, requestBody, from
 
         // 如果底层未标记，且不跳过错误计数，则在此处标记
         if (!credentialMarkedUnhealthy && !skipErrorCount && providerPoolManager && pooluuid) {
-            // 400 = client/model error, 404 = model not available on this project.
-            // Neither should mark the whole account unhealthy — apply model cooldown instead.
+            // 400/413 = client/request error, 404 = model not available on this project.
+            // None of these should mark the whole account unhealthy — apply model cooldown instead.
             if (error.response?.status === 400 || status === 400) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to status 400 (client error)`);
+            } else if (error.response?.status === 413 || status === 413) {
+                // 413 = payload too large (e.g. GitHub Models context limit). Request-level error,
+                // not an account fault — apply a short per-model cooldown and move on.
+                logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 413 — applying short model cooldown for ${model}`);
+                if (model) providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
+                credentialMarkedUnhealthy = true;
             } else if ((error.response?.status === 404 || status === 404) && model) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 404 — applying model cooldown for ${model}`);
                 providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model);
@@ -842,6 +871,20 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         // The service returns the response in its native format (toProvider).
         const needsConversion = getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider);
         requestBody.model = model;
+
+        // Response cache check — only on initial (non-retry) unary requests.
+        // Prevents quota drain when identical requests are retried or duplicated within 30s.
+        const _cacheKey = currentRetry === 0 ? getCacheKey(requestBody, model) : null;
+        if (_cacheKey) {
+            const cached = getCache(_cacheKey);
+            if (cached) {
+                logger.info(`[ResponseCache] Cache HIT for model=${model} — serving stored response`);
+                const metadata = { actualProvider: toProvider, actualModel: model, isFallback: false, uuid: pooluuid };
+                await handleUnifiedResponse(res, cached, false, 200, { ...metadata, cacheHit: true });
+                return;
+            }
+        }
+
         const nativeResponse = await service.generateContent(model, requestBody);
         // For unary, TTFT == total upstream time (single shot).
         if (_trace) {
@@ -850,6 +893,14 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
             _trace.totalUpstreamMs = elapsed;
             _trace.provider = toProvider;
             _trace.model = model;
+            // Capture token usage from unary response (Claude or OpenAI format)
+            const u = nativeResponse?.usage;
+            if (u) {
+                if (u.input_tokens != null)     _trace.inputTokens  = u.input_tokens;
+                if (u.output_tokens != null)    _trace.outputTokens = u.output_tokens;
+                if (u.prompt_tokens != null)    _trace.inputTokens  = u.prompt_tokens;
+                if (u.completion_tokens != null) _trace.outputTokens = u.completion_tokens;
+            }
         }
         const responseText = extractResponseText(nativeResponse, toProvider);
 
@@ -877,13 +928,16 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         }
 
         //logger.info(`[Response] Sending response to client: ${JSON.stringify(clientResponse)}`);
+        const clientResponseBody = JSON.stringify(clientResponse);
+        // Store in response cache for deduplication of identical subsequent requests
+        if (_cacheKey) setCache(_cacheKey, clientResponseBody);
         const metadata = {
             actualProvider: toProvider,
             actualModel: model,
             isFallback: retryContext?.isFallback || false,
             uuid: pooluuid
         };
-        await handleUnifiedResponse(res, JSON.stringify(clientResponse), false, 200, metadata);
+        await handleUnifiedResponse(res, clientResponseBody, false, 200, metadata);
         await logConversation('output', responseText, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
 
         // 一元请求成功完成，统计使用次数，错误次数重置为0
@@ -894,7 +948,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                 uuid: pooluuid
             });
             // Update last model file for statusline accuracy
-            updateLastModelFile(model, toProvider, customName, retryContext?.originalModel || null);
+            updateLastModelFile(model, toProvider, customName, retryContext?.originalModel || null, _trace);
         }
     } catch (error) {
         logger.error('\n[Server] Error during unary processing:', error.stack);
@@ -921,10 +975,16 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
 
         // 如果底层未标记，且不跳过错误计数，则在此处标记
         if (!credentialMarkedUnhealthy && !skipErrorCount && providerPoolManager && pooluuid) {
-            // 400 = client/model error, 404 = model not available on this project.
-            // Neither should mark the whole account unhealthy — apply model cooldown instead.
+            // 400/413 = client/request error, 404 = model not available on this project.
+            // None of these should mark the whole account unhealthy — apply model cooldown instead.
             if (error.response?.status === 400 || status === 400) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to status 400 (client error)`);
+            } else if (error.response?.status === 413 || status === 413) {
+                // 413 = payload too large (e.g. GitHub Models context limit). Request-level error,
+                // not an account fault — apply a short per-model cooldown and move on.
+                logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 413 — applying short model cooldown for ${model}`);
+                if (model) providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model, 60000);
+                credentialMarkedUnhealthy = true;
             } else if ((error.response?.status === 404 || status === 404) && model) {
                 logger.info(`[Provider Pool] Skipping unhealthy marking for ${toProvider} (${pooluuid}) due to 404 — applying model cooldown for ${model}`);
                 providerPoolManager.markModelCooldownForAccount(toProvider, pooluuid, model);
@@ -1121,7 +1181,7 @@ export async function handleModelListRequest(req, res, service, endpointType, CO
 
         if (isMultiProvider && providerPoolManager) {
             logger.info(`[ModelList] Aggregating models for multi-provider mode...`);
-            clientModelList = await providerPoolManager.getAllAvailableModels(endpointType);
+            clientModelList = await providerPoolManager.getCachedAvailableModels(endpointType);
         } else {
             // --- 单提供商逻辑 ---
             const toProvider = CONFIG.MODEL_PROVIDER;
@@ -1245,6 +1305,7 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
     let actualCustomName = CONFIG.customName;
 
     let isFallbackUsed = false;
+    let result;
 
     // 2.5. 根据模型选择服务适配器：
     // - service 缺失时（例如上游未预先注入）进行兜底选择
@@ -1253,7 +1314,7 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
     const shouldSelectByPool = providerPoolManager && (CONFIG.MODEL_PROVIDER === MODEL_PROVIDER.AUTO || (CONFIG.providerPools && CONFIG.providerPools[CONFIG.MODEL_PROVIDER]));
     if (!service || shouldSelectByPool) {
         const { getApiServiceWithFallback } = await import('../services/service-manager.js');
-        const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: shouldSelectByPool });
+        result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: shouldSelectByPool });
 
         service = result.service;
         toProvider = result.actualProviderType;
@@ -1289,7 +1350,6 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         processedRequestBody._requestBaseUrl = CONFIG.requestBaseUrl;
     }
 
-    console.log('[DEBUG-CONV-CHECK] fromProvider:', fromProvider, 'toProvider:', toProvider, 'fromProtocol:', getProtocolPrefix(fromProvider), 'toProtocol:', getProtocolPrefix(toProvider));
     if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(toProvider)) {
         logger.info(`[Request Convert] Converting request from ${fromProvider} to ${toProvider}`);
         const preConvertBody = processedRequestBody;
@@ -1340,6 +1400,7 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
                 reason: 'initial-pool-selection-fallback',
                 errorCode: null,
                 penaltyMs: 0,
+                isModelDowngrade: result?.isModelDowngrade === true,
             });
         }
         // Stash request-body thinking flag so the stream handler can consult it.
