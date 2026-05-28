@@ -1639,33 +1639,27 @@ export class ProviderPoolManager {
                         provider: providerType,
                         model: model
                     };
-                    if (isClaudeProvider) {
-                        // Generate a friendly display name for Claude providers.
-                        // "claude-kiro-oauth" -> "kiro", "claude-antigravity" -> "antigravity"
-                        const providerShort = providerType.replace(/^claude-/i, '').replace(/-oauth$/i, '');
-                        // "claude-opus-4-7" -> "Claude Opus 4.7", "claude-sonnet-4-6-thinking" -> "Claude Sonnet 4.6 Thinking"
-                        const friendlyModel = model
-                            .replace(/(\d+)-(\d+)/g, '$1.$2')
-                            .split('-')
-                            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                            .join(' ');
-                        entry.display_name = `${friendlyModel} (${providerShort})`;
-                    }
+                    // Build a canonical "Claude FriendlyName (provider)" display name for every model.
+                    // Claude Code's /model picker shows display_name, so every entry needs one.
+                    const _providerShort = providerType.replace(/^claude-/i, '').replace(/-oauth$/i, '');
+                    const _friendly = model
+                        .replace(/(\d+)[.-](\d+)/g, '$1.$2')
+                        .split(/[-/:]+/)
+                        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                        .join(' ');
+                    entry.display_name = _friendly.startsWith('Claude')
+                        ? `${_friendly} (${_providerShort})`
+                        : `Claude ${_friendly} (${_providerShort})`;
+
                     allModels.push(entry);
                     // Claude Code's /model picker filters to /^(claude|anthropic)/i.
                     // Emit a claude-prefixed alias so non-Claude providers appear in the picker.
                     // The alias routes back to the real provider via claude- prefix stripping
                     // in service-manager._resolveEffectiveRouting.
                     if (!isClaudeProvider) {
-                        const providerShort = providerType.replace(/-oauth$/i, '');
-                        const friendlyModel = model
-                            .replace(/(\d+)[.-](\d+)/g, '$1.$2')
-                            .split(/[-/]/)
-                            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                            .join(' ');
                         allModels.push({
                             id: `claude-${providerType}:${model}`,
-                            display_name: `${friendlyModel} (${providerShort})`,
+                            display_name: entry.display_name,
                             provider: providerType,
                             model: model
                         });
@@ -1699,7 +1693,7 @@ export class ProviderPoolManager {
                     name: `models/${m.id}`,
                     baseModelId: m.model,
                     version: "v1",
-                    displayName: `${m.model} (${m.provider})`,
+                    displayName: m.display_name || `Claude ${m.model} (${m.provider})`,
                     description: `Model ${m.model} provided by ${m.provider}`,
                     supportedGenerationMethods: ["generateContent", "countTokens"]
                 }))

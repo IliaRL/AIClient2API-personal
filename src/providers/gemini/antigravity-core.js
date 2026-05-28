@@ -223,10 +223,13 @@ function normalizeAntigravityThinking(modelName, payload, isClaudeModel) {
     
     let normalizedBudget = normalizeThinkingBudget(modelName, budget);
     
-    // 确保 thinking budget < max_tokens (对所有模型生效，不仅是 Claude)
+    // Ensure thinking budget < max_tokens. Cap at 75% of max to leave room for actual output,
+    // but never below DEFAULT_THINKING_MIN — otherwise the min-budget check at line 235 removes
+    // thinkingConfig entirely, silently disabling extended thinking.
     const maxTokens = payload?.request?.generationConfig?.maxOutputTokens || payload?.request?.generationConfig?.max_output_tokens;
     if (maxTokens && maxTokens > 0 && normalizedBudget >= maxTokens) {
-        normalizedBudget = Math.max(0, maxTokens - 1);
+        const safeMax = Math.floor(maxTokens * 0.75);
+        normalizedBudget = Math.max(DEFAULT_THINKING_MIN, Math.min(normalizedBudget, safeMax));
     }
     
     // 如果是 Claude 模型，检查最小 budget

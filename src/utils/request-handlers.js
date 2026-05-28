@@ -98,6 +98,18 @@ function getCustomModelEntriesForProvider(config, providerType = null, options =
     return entries;
 }
 
+function buildFriendlyDisplayName(modelId, providerType) {
+    const friendly = (modelId || '')
+        .replace(/(\d+)[.-](\d+)/g, '$1.$2')
+        .split(/[-/:]+/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    const providerShort = (providerType || '').replace(/^claude-/i, '').replace(/-oauth$/i, '');
+    return friendly.startsWith('Claude')
+        ? `${friendly} (${providerShort})`
+        : `Claude ${friendly} (${providerShort})`;
+}
+
 function appendCustomModelsToModelList(clientModelList, customEntries, providerType, listEndpointType) {
     const entries = Array.isArray(customEntries) ? customEntries : [];
     const hasMetadataValue = (value) => value !== undefined && value !== null;
@@ -152,7 +164,7 @@ function appendCustomModelsToModelList(clientModelList, customEntries, providerT
             const existingModel = models.find(model => model?.id === entry.id);
             if (existingModel) {
                 // 更新现有模型的元数据
-                if (entry.config.name) existingModel.display_name = entry.config.name;
+                existingModel.display_name = entry.config.name || existingModel.display_name || buildFriendlyDisplayName(entry.id, entry.provider || providerType);
                 if (entry.config.description) existingModel.description = entry.config.description;
                 if (hasMetadataValue(entry.config.contextLength)) existingModel.context_length = entry.config.contextLength;
                 if (hasMetadataValue(entry.config.maxTokens)) existingModel.max_tokens = entry.config.maxTokens;
@@ -165,7 +177,7 @@ function appendCustomModelsToModelList(clientModelList, customEntries, providerT
                 object: 'model',
                 created: Math.floor(Date.now() / 1000),
                 owned_by: entry.provider || providerType || 'custom',
-                display_name: entry.config.name || entry.id
+                display_name: entry.config.name || buildFriendlyDisplayName(entry.id, entry.provider || providerType)
             };
 
             if (entry.config.description) modelResponse.description = entry.config.description;
@@ -1144,7 +1156,8 @@ export async function handleModelListRequest(req, res, service, endpointType, CO
                             id: modelId,
                             object: 'model',
                             created: Math.floor(Date.now() / 1000),
-                            owned_by: providerType
+                            owned_by: providerType,
+                            display_name: buildFriendlyDisplayName(modelId, providerType)
                         };
 
                         // 注入自定义元数据
@@ -1152,6 +1165,7 @@ export async function handleModelListRequest(req, res, service, endpointType, CO
                             if (customConfig.contextLength) modelResponse.context_length = customConfig.contextLength;
                             if (customConfig.maxTokens) modelResponse.max_tokens = customConfig.maxTokens;
                             if (customConfig.description) modelResponse.description = customConfig.description;
+                            if (customConfig.name) modelResponse.display_name = customConfig.name;
                         }
 
                         return modelResponse;
