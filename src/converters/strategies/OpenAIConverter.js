@@ -578,14 +578,15 @@ export class OpenAIConverter extends BaseConverter {
             for (const toolCall of delta.tool_calls) {
                 const openaiIdx = toolCall.index ?? 0;
 
-                if (toolCall.function?.name) {
-                    // New tool call starting: close any open text/thinking block first.
+                if (toolCall.function?.name && !state.toolIndexMap.has(openaiIdx)) {
+                    // New tool index — close any open block first, then open this one.
                     if (state.blockStarted && state.currentBlockType !== 'tool_use') {
+                        // Close open text/thinking block.
                         events.push({ type: "content_block_stop", index: state.blockIndex });
                         state.blockIndex++;
                         state.blockStarted = false;
-                    } else if (state.blockStarted && state.toolIndexMap.has(openaiIdx)) {
-                        // Parallel tool: close previous tool block before opening next.
+                    } else if (state.blockStarted) {
+                        // Parallel tool: close the previous tool block before opening next.
                         events.push({ type: "content_block_stop", index: state.blockIndex });
                         state.blockIndex++;
                         state.blockStarted = false;
@@ -603,6 +604,8 @@ export class OpenAIConverter extends BaseConverter {
                             input: {}
                         }
                     });
+                    // If toolIndexMap already has openaiIdx: provider resent name on same index.
+                    // Skip content_block_start — args still flow through below.
                 }
 
                 if (toolCall.function?.arguments) {
