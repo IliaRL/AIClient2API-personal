@@ -1425,7 +1425,7 @@ export class GrokConverter extends BaseConverter {
         const out = [];
 
         for (const p of pieces) {
-            const events = openaiConverter.toClaudeStreamChunk(p, model);
+            const events = openaiConverter.toClaudeStreamChunk(p, model, requestId);
             if (!events) continue;
 
             const arr = Array.isArray(events) ? events : [events];

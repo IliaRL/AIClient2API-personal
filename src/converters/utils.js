@@ -73,6 +73,10 @@ export const MODEL_MAX_OUTPUT_TOKENS = {
     'gemini-3-flash': 65535,
     'gemini-3.1-pro-high': 65535,
     'gemini-3.1-pro-low': 65535,
+    'gemini-3.5-flash-extra-low': 65535,
+    'gemini-3.5-flash-low': 65535,
+    'gemini-3.5-flash-medium': 65535,   // alias → gemini-3.5-flash-low
+    'gemini-3.5-flash-high': 65535,     // alias → gemini-3-flash-agent
     'gemini-3.1-flash-image': 65535,
     'gemini-3-flash-agent': 65535,
     'gemini-2.5-flash-thinking': 65535,
@@ -131,6 +135,10 @@ export const MODEL_CONTEXT_WINDOWS = {
     'gemini-3-flash': 1048576,
     'gemini-3.1-pro-high': 1048576,
     'gemini-3.1-pro-low': 1048576,
+    'gemini-3.5-flash-extra-low': 1048576,
+    'gemini-3.5-flash-low': 1048576,
+    'gemini-3.5-flash-medium': 1048576,   // alias → gemini-3.5-flash-low
+    'gemini-3.5-flash-high': 1048576,     // alias → gemini-3-flash-agent
     'gemini-3.1-flash-image': 1048576,
     'gemini-3-flash-agent': 1048576,
     'gemini-2.5-flash-thinking': 1048576,

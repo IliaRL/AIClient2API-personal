@@ -53,37 +53,53 @@ for lf in "$LOG_FILE" "$LITELLM_LOG"; do
     fi
 done
 
-echo "Starting LiteLLM Gateway..."
-cd /Users/ilialiston/LiteLLM-Gateway && nohup venv/bin/litellm --config litellm_config.yaml --port $LITELLM_PORT > $LITELLM_LOG 2>&1 &
+# Start Tier1 first — LiteLLM must NOT start until Tier1 is healthy.
+# Starting both simultaneously causes a thundering herd: LiteLLM fires 80 concurrent
+# health-check requests at :3000 before it has finished initializing, spiking CPU.
+echo "Starting AIClient2API (Tier1)..."
+cd /Users/ilialiston/AIClient2API && nohup pnpm start > $LOG_FILE 2>&1 &
 
-echo "Starting AIClient2API Proxy..."
-cd /Users/ilialiston/AIClient2API && nohup npm start > $LOG_FILE 2>&1 &
-
-echo "Waiting for services to be ready..."
+echo "Waiting for Tier1 to be ready..."
 PROXY_READY=0
-LITELLM_READY=0
-
-for i in $(seq 1 30); do
-    if [ $PROXY_READY -eq 0 ] && curl -sf http://127.0.0.1:$PORT/api/help -o /dev/null; then
-        echo "AIClient2API Proxy is ready!"
+for i in $(seq 1 40); do
+    if curl -sf -H "Authorization: Bearer $AICLIENT_TOKEN" \
+        http://127.0.0.1:$PORT/v1/models -o /dev/null 2>/dev/null; then
+        echo "AIClient2API is ready!"
         PROXY_READY=1
-    fi
-    
-    # Use netcat to check if the port is open instead of curling /health, 
-    # because LiteLLM enforces auth on /health and returns 401.
-    if [ $LITELLM_READY -eq 0 ] && nc -z 127.0.0.1 $LITELLM_PORT 2>/dev/null; then
-        echo "LiteLLM Gateway is ready!"
-        LITELLM_READY=1
-    fi
-    
-    if [ $PROXY_READY -eq 1 ] && [ $LITELLM_READY -eq 1 ]; then
-        echo "Both services are securely restarted and ready!"
-        exit 0
+        break
     fi
     sleep 0.5
 done
 
-echo "Error: Services failed to start within 15 seconds."
-tail -n 15 $LOG_FILE
-tail -n 15 $LITELLM_LOG
-exit 1
+if [ $PROXY_READY -eq 0 ]; then
+    echo "Error: AIClient2API did not start within 20 seconds."
+    tail -n 15 $LOG_FILE
+    exit 1
+fi
+
+# Only start LiteLLM once Tier1 is confirmed healthy.
+echo "Starting LiteLLM Gateway (Tier2)..."
+nohup /Users/ilialiston/MASTER-C/Tier2-LiteLLM/.venv/bin/litellm \
+  --config /Users/ilialiston/MASTER-C/Tier2-LiteLLM/litellm_config.yaml \
+  --port $LITELLM_PORT > $LITELLM_LOG 2>&1 &
+
+echo "Waiting for Tier2 to be ready..."
+LITELLM_READY=0
+for i in $(seq 1 40); do
+    # nc check: LiteLLM enforces auth on /health and returns 401 — port open is enough
+    if nc -z 127.0.0.1 $LITELLM_PORT 2>/dev/null; then
+        echo "LiteLLM Gateway is ready!"
+        LITELLM_READY=1
+        break
+    fi
+    sleep 0.5
+done
+
+if [ $LITELLM_READY -eq 0 ]; then
+    echo "Error: LiteLLM did not start within 20 seconds."
+    tail -n 15 $LITELLM_LOG
+    exit 1
+fi
+
+echo "Both services restarted and ready."
+exit 0

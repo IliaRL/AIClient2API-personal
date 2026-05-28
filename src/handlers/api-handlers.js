@@ -196,7 +196,6 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
             error.skipErrorCount = true;
             throw error;
         }
-        console.log('[DEBUG-REQUEST-BODY] TO-PROVIDER:', toProvider, 'BODY:', JSON.stringify(requestBody).substring(0, 500));
         const nativeResponse = await service.generateContent(model, requestBody);
         const responseText = extractResponseText(nativeResponse, toProvider);
         let clientResponse = needsConversion ? convertData(nativeResponse, 'response', toProvider, fromProvider, model) : nativeResponse;
@@ -206,7 +205,6 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
         await logConversation('output', responseText, PROMPT_LOG_MODE, PROMPT_LOG_FILENAME);
         if (providerPoolManager && pooluuid) providerPoolManager.markProviderHealthy(toProvider, { uuid: pooluuid });
     } catch (error) {
-        console.log('[DEBUG-FALLBACK-CATCH] Caught error:', error.message, 'statusCode:', getErrorStatusCode(error));
         const rateLimitRecoveryTime = getRateLimitCooldownRecoveryTime(error, CONFIG);
         const statusCode = getErrorStatusCode(error);
         if (rateLimitRecoveryTime && providerPoolManager && pooluuid) {
@@ -247,8 +245,6 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                     newRequestBody = { ...retryContext.originalRequestBody };
                     if (getProtocolPrefix(fromProvider) !== getProtocolPrefix(newToProvider)) {
                         newRequestBody = convertData(newRequestBody, 'request', fromProvider, newToProvider);
-                        console.log('[DEBUG-FALLBACK-CONVERT] original was:', JSON.stringify(retryContext.originalRequestBody).substring(0,200));
-                        console.log('[DEBUG-FALLBACK-CONVERT] converted to:', newToProvider, 'body:', JSON.stringify(newRequestBody).substring(0,200));
                     }
                     const strategy = ProviderStrategyFactory.getStrategy(getProtocolPrefix(newToProvider));
                     newRequestBody = await strategy.applySystemPromptFromFile(CONFIG, newRequestBody);
@@ -300,7 +296,6 @@ function buildConfiguredModelListResponse(models, providerType, listEndpointType
 }
 
 export async function handleContentGenerationRequest(req, res, service, endpointType, CONFIG, PROMPT_LOG_FILENAME, providerPoolManager, pooluuid, requestPath = null) {
-    console.log("DEBUG: api-handlers.js handleContentGenerationRequest CALLED!");
     let fromProvider;
     try {
         const originalRequestBody = await getRequestBody(req);

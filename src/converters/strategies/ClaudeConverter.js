@@ -929,6 +929,20 @@ export class ClaudeConverter extends BaseConverter {
             }
         }
 
+        // Build tool_use_id → function name map from prior assistant messages.
+        // Gemini requires functionResponse.name to exactly match the prior functionCall.name.
+        // Anthropic IDs (toolu_xxx) are opaque and cannot be parsed for the name.
+        const tcID2Name = {};
+        for (const message of claudeRequest.messages || []) {
+            if (message.role === 'assistant' && Array.isArray(message.content)) {
+                for (const block of message.content) {
+                    if (block?.type === 'tool_use' && block.id && block.name) {
+                        tcID2Name[block.id] = block.name;
+                    }
+                }
+            }
+        }
+
         // 处理消息
         if (Array.isArray(claudeRequest.messages)) {
             claudeRequest.messages.forEach(message => {
@@ -1013,36 +1027,27 @@ export class ClaudeConverter extends BaseConverter {
                                 }
                                 break;
                                 
-                            case 'tool_result':
-                                // 转换为 Gemini functionResponse 格式
-                                // 的实现，正确处理 tool_use_id 到函数名的映射
+                            case 'tool_result': {
                                 const toolCallId = block.tool_use_id;
                                 if (toolCallId) {
-                                    // 尝试从之前的 tool_use 块中查找对应的函数名
-                                    // 如果找不到，则从 tool_use_id 中提取
-                                    let funcName = toolCallId;
-                                    
-                                    // 检查是否有缓存的 tool_id -> name 映射
-                                    // 格式通常是 "funcName-uuid" 或 "toolu_xxx"
-                                    if (toolCallId.startsWith('toolu_')) {
-                                        // Claude 格式的 tool_use_id，需要从上下文中查找函数名
-                                        // 这里我们保留原始 ID 作为 name（Gemini 会处理）
-                                        funcName = toolCallId;
-                                    } else {
-                                        const toolCallIdParts = toolCallId.split('-');
-                                        if (toolCallIdParts.length > 1) {
-                                            // 移除最后一个部分（UUID），保留函数名
-                                            funcName = toolCallIdParts.slice(0, -1).join('-');
+                                    // Look up the real function name from tcID2Name built above.
+                                    // Anthropic IDs (toolu_xxx) are opaque — the name cannot be
+                                    // derived from the ID. Fall back to heuristic only if not found.
+                                    let funcName = tcID2Name[toolCallId];
+                                    if (!funcName) {
+                                        logger.warn(`tool_result: no name mapping for id "${toolCallId}", using heuristic fallback`);
+                                        if (!toolCallId.startsWith('toolu_')) {
+                                            const idParts = toolCallId.split('-');
+                                            funcName = idParts.length > 1
+                                                ? idParts.slice(0, -1).join('-')
+                                                : toolCallId;
+                                        } else {
+                                            funcName = toolCallId;
                                         }
                                     }
-                                    
-                                    // 获取响应数据
+
                                     let responseData = block.content;
-                                    
-                                    // 的 tool_result_compressor 逻辑
-                                    // 处理嵌套的 content 数组（如图片等）
                                     if (Array.isArray(responseData)) {
-                                        // 提取文本内容
                                         const textParts = responseData
                                             .filter(item => item && item.type === 'text')
                                             .map(item => item.text)
@@ -1051,17 +1056,16 @@ export class ClaudeConverter extends BaseConverter {
                                     } else if (typeof responseData !== 'string') {
                                         responseData = JSON.stringify(responseData);
                                     }
-                                    
+
                                     parts.push({
                                         functionResponse: {
                                             name: funcName,
-                                            response: {
-                                                result: responseData
-                                            }
+                                            response: { result: responseData }
                                         }
                                     });
                                 }
                                 break;
+                            }
                                 
                             case 'image':
                                 if (block.source && block.source.type === 'base64') {
@@ -1499,7 +1503,7 @@ export class ClaudeConverter extends BaseConverter {
     /**
      * 处理Claude内容到Gemini parts
      */
-    processClaudeContentToGeminiParts(content) {
+    processClaudeContentToGeminiParts(content, tcID2Name = {}) {
         if (!content) return [];
 
         if (typeof content === 'string') {
@@ -1550,9 +1554,10 @@ export class ClaudeConverter extends BaseConverter {
 
                     case 'tool_result':
                         if (typeof block.tool_use_id === 'string') {
+                            const name = tcID2Name[block.tool_use_id] || block.tool_use_id;
                             parts.push({
                                 functionResponse: {
-                                    name: block.tool_use_id,
+                                    name,
                                     response: { content: block.content }
                                 }
                             });

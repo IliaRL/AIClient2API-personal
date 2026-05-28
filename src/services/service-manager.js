@@ -387,6 +387,15 @@ async function _resolveEffectiveRouting(config, requestedModel) {
             effectiveProvider = prefix;
             actualModelName = modelSuffix;
             logger.info(`[Routing] Prefix resolved: ${prefix}:${modelSuffix}`);
+        } else if (providerPoolManager && prefix.startsWith('claude-')) {
+            // Handle claude-prefixed aliases emitted for Claude Code's /model picker.
+            // e.g. "claude-gemini-antigravity:gemini-3-flash" → provider "gemini-antigravity", model "gemini-3-flash"
+            const realPrefix = prefix.slice('claude-'.length);
+            if (providerPoolManager.providerStatus[realPrefix] || config.providerPools?.[realPrefix]) {
+                effectiveProvider = realPrefix;
+                actualModelName = modelSuffix;
+                logger.info(`[Routing] claude-alias resolved: ${prefix} → ${realPrefix}:${modelSuffix}`);
+            }
         }
     } else if (requestedModel) {
         // 1.1. 智能自动路由：根据模型名称模式映射到提供商

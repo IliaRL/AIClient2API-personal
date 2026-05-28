@@ -31,7 +31,8 @@ let workerStatus = {
     startTime: null,
     restartCount: 0,
     lastRestartTime: null,
-    isRestarting: false
+    isRestarting: false,
+    isStopping: false
 };
 
 // 配置
@@ -82,8 +83,8 @@ function startWorker() {
         workerStatus.pid = null;
 
         // 如果不是主动重启导致的退出，尝试自动重启
-        if (!workerStatus.isRestarting && code !== 0) {
-            logger.info('[Master] Worker crashed, attempting auto-restart...');
+        if (!workerStatus.isRestarting && !workerStatus.isStopping) {
+            logger.info('[Master] Worker exited unexpectedly, attempting auto-restart...');
             scheduleRestart();
         }
     });
@@ -100,8 +101,10 @@ function startWorker() {
  * @returns {Promise<void>}
  */
 function stopWorker(graceful = true) {
+    workerStatus.isStopping = true;
     return new Promise((resolve) => {
         if (!workerProcess) {
+            workerStatus.isStopping = false;
             logger.info('[Master] No worker process to stop');
             resolve();
             return;
@@ -109,28 +112,34 @@ function stopWorker(graceful = true) {
 
         logger.info('[Master] Stopping worker process, PID:', workerProcess.pid);
 
+        const processToStop = workerProcess;
+
         const timeout = setTimeout(() => {
-            if (workerProcess) {
+            if (processToStop && processToStop === workerProcess) {
                 logger.info('[Master] Force killing worker process...');
-                workerProcess.kill('SIGKILL');
+                processToStop.kill('SIGKILL');
             }
+            workerStatus.isStopping = false;
             resolve();
         }, 5000); // 5秒超时后强制杀死
 
-        workerProcess.once('exit', () => {
+        processToStop.once('exit', () => {
             clearTimeout(timeout);
-            workerProcess = null;
-            workerStatus.pid = null;
+            if (workerProcess === processToStop) {
+                workerProcess = null;
+                workerStatus.pid = null;
+            }
+            workerStatus.isStopping = false;
             logger.info('[Master] Worker process stopped');
             resolve();
         });
 
         if (graceful) {
             // 发送优雅关闭信号
-            workerProcess.send({ type: 'shutdown' });
-            workerProcess.kill('SIGTERM');
+            processToStop.send({ type: 'shutdown' });
+            processToStop.kill('SIGTERM');
         } else {
-            workerProcess.kill('SIGKILL');
+            processToStop.kill('SIGKILL');
         }
     });
 }

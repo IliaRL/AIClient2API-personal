@@ -162,6 +162,8 @@ function normalizeToolName(name) {
 export class GeminiConverter extends BaseConverter {
     constructor() {
         super('gemini');
+        // Per-request stream state for stateful Claude SSE conversion (concurrent-safe).
+        this.streamParams = new Map();
     }
 
     /**
@@ -210,14 +212,14 @@ export class GeminiConverter extends BaseConverter {
     /**
      * 转换流式响应块
      */
-    convertStreamChunk(chunk, targetProtocol, model) {
+    convertStreamChunk(chunk, targetProtocol, model, requestId) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.OPENAI:
             case MODEL_PROTOCOL_PREFIX.NVIDIA:
             case MODEL_PROTOCOL_PREFIX.GITHUB:
-                return this.toOpenAIStreamChunk(chunk, model);
+                return this.toOpenAIStreamChunk(chunk, model, requestId);
             case MODEL_PROTOCOL_PREFIX.CLAUDE:
-                return this.toClaudeStreamChunk(chunk, model);
+                return this.toClaudeStreamChunk(chunk, model, requestId);
             case MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES:
                 return this.toOpenAIResponsesStreamChunk(chunk, model);
             case MODEL_PROTOCOL_PREFIX.CODEX:
@@ -372,11 +374,19 @@ export class GeminiConverter extends BaseConverter {
     /**
      * Gemini流式响应 -> OpenAI流式响应
      */
-    toOpenAIStreamChunk(geminiChunk, model) {
+    toOpenAIStreamChunk(geminiChunk, model, requestId) {
         if (!geminiChunk) return null;
 
         const candidate = geminiChunk.candidates?.[0];
         if (!candidate) return null;
+
+        // Reuse the same chunk ID across all chunks of a stream so LiteLLM
+        // groups them as one response instead of treating each as a new message.
+        const stateKey = requestId || 'openai-default';
+        if (!this.streamParams.has(stateKey)) {
+            this.streamParams.set(stateKey, { chunkId: `chatcmpl-${uuidv4()}` });
+        }
+        const chunkId = this.streamParams.get(stateKey).chunkId;
 
         let content = '';
         const toolCalls = [];
@@ -385,6 +395,8 @@ export class GeminiConverter extends BaseConverter {
         const parts = candidate.content?.parts;
         if (parts && Array.isArray(parts)) {
             for (const part of parts) {
+                // Skip thought parts — internal reasoning, must not appear in visible content.
+                if (part.thought === true) continue;
                 if (part.text) {
                     content += part.text;
                 }
@@ -441,7 +453,7 @@ export class GeminiConverter extends BaseConverter {
         }
 
         const chunk = {
-            id: `chatcmpl-${uuidv4()}`,
+            id: chunkId,
             object: "chat.completion.chunk",
             created: Math.floor(Date.now() / 1000),
             model: model,
@@ -465,6 +477,11 @@ export class GeminiConverter extends BaseConverter {
                     reasoning_tokens: geminiChunk.usageMetadata.thoughtsTokenCount || 0
                 }
             };
+        }
+
+        // Clean up state when stream ends
+        if (finishReason) {
+            this.streamParams.delete(stateKey);
         }
 
         return chunk;
@@ -555,6 +572,11 @@ export class GeminiConverter extends BaseConverter {
         geminiResponse.candidates.forEach(candidate => {
             if (candidate.content && candidate.content.parts) {
                 candidate.content.parts.forEach(part => {
+                    // Skip thought parts — they are internal reasoning and must
+                    // not leak into the visible assistant content. The streaming
+                    // path (toClaudeStreamChunk) already routes thought parts to
+                    // thinking_delta events; the non-streaming path must do the same.
+                    if (part.thought === true) return;
                     if (part.text) {
                         contents.push(part.text);
                     }
@@ -691,175 +713,155 @@ export class GeminiConverter extends BaseConverter {
     /**
      * Gemini流式响应 -> Claude流式响应
      */
-    toClaudeStreamChunk(geminiChunk, model) {
+    toClaudeStreamChunk(geminiChunk, model, requestId) {
         if (!geminiChunk) return null;
 
-        // 处理完整的Gemini chunk对象
-        if (typeof geminiChunk === 'object' && !Array.isArray(geminiChunk)) {
-            const candidate = geminiChunk.candidates?.[0];
-            
-            if (candidate) {
-                const parts = candidate.content?.parts;
-                
-                // thinking 和 text 块
-                if (parts && Array.isArray(parts)) {
-                    const results = [];
-                    let hasToolUse = false;
-                    
-                    for (const part of parts) {
-                        if (!part) continue;
-                        
-                        if (typeof part.text === 'string') {
-                            if (part.thought === true) {
-                                // [FIX] 这是一个 thinking 块
-                                const thinkingResult = {
-                                    type: "content_block_delta",
-                                    index: 0,
-                                    delta: {
-                                        type: "thinking_delta",
-                                        thinking: part.text
-                                    }
-                                };
-                                results.push(thinkingResult);
-                                
-                                // 如果有签名，发送 signature_delta
-                                // [FIX] 同时检查 thoughtSignature 和 thought_signature
-                                const rawSignature = part.thoughtSignature || part.thought_signature;
-                                if (rawSignature) {
-                                    let signature = rawSignature;
-                                    try {
-                                        const decoded = Buffer.from(signature, 'base64').toString('utf-8');
-                                        if (decoded && decoded.length > 0 && !decoded.includes('\ufffd')) {
-                                            signature = decoded;
-                                        }
-                                    } catch (e) {
-                                        // 解码失败，保持原样
-                                    }
-                                    results.push({
-                                        type: "content_block_delta",
-                                        index: 0,
-                                        delta: {
-                                            type: "signature_delta",
-                                            signature: signature
-                                        }
-                                    });
-                                }
-                            } else {
-                                // 普通文本
-                                results.push({
-                                    type: "content_block_delta",
-                                    index: 0,
-                                    delta: {
-                                        type: "text_delta",
-                                        text: part.text
-                                    }
-                                });
-                            }
-                        }
-                        
-                        // [FIX] 处理 functionCall
-                        if (part.functionCall) {
-                            hasToolUse = true;
-                            // [FIX] 规范化工具名称和参数映射
-                            const toolName = normalizeToolName(part.functionCall.name);
-                            const remappedArgs = remapFunctionCallArgs(toolName, part.functionCall.args || {});
-                            
-                            // 发送 tool_use 开始
-                            const toolId = part.functionCall.id || `${toolName}-${uuidv4().split('-')[0]}`;
-                            results.push({
-                                type: "content_block_start",
-                                index: 0,
-                                content_block: {
-                                    type: "tool_use",
-                                    id: toolId,
-                                    name: toolName,
-                                    input: {}
-                                }
-                            });
-                            // 发送参数
-                            results.push({
-                                type: "content_block_delta",
-                                index: 0,
-                                delta: {
-                                    type: "input_json_delta",
-                                    partial_json: JSON.stringify(remappedArgs)
-                                }
-                            });
-                        }
-                    }
-                    
-                    // [FIX] 如果有工具调用，添加 message_delta 事件设置 stop_reason 为 tool_use
-                    if (hasToolUse && candidate.finishReason) {
-                        const messageDelta = {
-                            type: "message_delta",
-                            delta: {
-                                stop_reason: 'tool_use'
-                            }
-                        };
-                        if (geminiChunk.usageMetadata) {
-                            messageDelta.usage = {
-                                input_tokens: geminiChunk.usageMetadata.promptTokenCount || 0,
-                                cache_creation_input_tokens: 0,
-                                cache_read_input_tokens: geminiChunk.usageMetadata.cachedContentTokenCount || 0,
-                                output_tokens: geminiChunk.usageMetadata.candidatesTokenCount || 0
-                            };
-                        }
-                        results.push(messageDelta);
-                    }
-                    
-                    // 如果有多个结果，返回数组；否则返回单个或 null
-                    if (results.length > 1) {
-                        return results;
-                    } else if (results.length === 1) {
-                        return results[0];
+        // Stateful conversion: each request gets its own state keyed by requestId.
+        // The old stateless version never emitted message_start or content_block_start
+        // for text, and hardcoded all block indices to 0 — causing Claude Code to see
+        // orphaned deltas and cut off mid-response.
+        const stateKey = requestId || 'default';
+
+        if (!this.streamParams.has(stateKey)) {
+            this.streamParams.set(stateKey, {
+                messageStarted: false,
+                blockStarted: false,
+                currentBlockType: null,
+                blockIndex: 0,
+            });
+        }
+        const state = this.streamParams.get(stateKey);
+
+        if (typeof geminiChunk === 'string') {
+            const events = [];
+            if (!state.messageStarted) {
+                state.messageStarted = true;
+                events.push({ type: "message_start", message: { id: `msg_${uuidv4()}`, type: "message", role: "assistant", content: [], model: model || "unknown", stop_reason: null, stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 } } });
+            }
+            if (!state.blockStarted) {
+                state.blockStarted = true;
+                state.currentBlockType = 'text';
+                events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "text", text: "" } });
+            }
+            events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "text_delta", text: geminiChunk } });
+            return events;
+        }
+
+        if (typeof geminiChunk !== 'object' || Array.isArray(geminiChunk)) return null;
+
+        const candidate = geminiChunk.candidates?.[0];
+        if (!candidate) return null;
+
+        const parts = candidate.content?.parts;
+        const events = [];
+
+        if (!state.messageStarted) {
+            state.messageStarted = true;
+            events.push({
+                type: "message_start",
+                message: {
+                    id: `msg_${uuidv4()}`,
+                    type: "message",
+                    role: "assistant",
+                    content: [],
+                    model: model || "unknown",
+                    stop_reason: null,
+                    stop_sequence: null,
+                    usage: {
+                        input_tokens: geminiChunk.usageMetadata?.promptTokenCount || 0,
+                        output_tokens: 0
                     }
                 }
-                
-                // 处理finishReason
-                if (candidate.finishReason) {
-                    const result = {
-                        type: "message_delta",
-                        delta: {
-                            stop_reason: candidate.finishReason === 'STOP' ? 'end_turn' :
-                                       candidate.finishReason === 'MAX_TOKENS' ? 'max_tokens' :
-                                       candidate.finishReason.toLowerCase()
+            });
+        }
+
+        if (parts && Array.isArray(parts)) {
+            for (const part of parts) {
+                if (!part) continue;
+
+                if (typeof part.text === 'string') {
+                    if (part.thought === true) {
+                        if (state.blockStarted && state.currentBlockType !== 'thinking') {
+                            events.push({ type: "content_block_stop", index: state.blockIndex });
+                            state.blockIndex++;
+                            state.blockStarted = false;
                         }
-                    };
-                    
-                    // 添加 usage 信息
-                    if (geminiChunk.usageMetadata) {
-                        result.usage = {
-                            input_tokens: geminiChunk.usageMetadata.promptTokenCount || 0,
-                            cache_creation_input_tokens: 0,
-                            cache_read_input_tokens: geminiChunk.usageMetadata.cachedContentTokenCount || 0,
-                            output_tokens: geminiChunk.usageMetadata.candidatesTokenCount || 0,
-                            prompt_tokens: geminiChunk.usageMetadata.promptTokenCount || 0,
-                            completion_tokens: geminiChunk.usageMetadata.candidatesTokenCount || 0,
-                            total_tokens: geminiChunk.usageMetadata.totalTokenCount || 0,
-                            cached_tokens: geminiChunk.usageMetadata.cachedContentTokenCount || 0
-                        };
+                        if (!state.blockStarted) {
+                            state.blockStarted = true;
+                            state.currentBlockType = 'thinking';
+                            events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "thinking", thinking: "" } });
+                        }
+                        events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "thinking_delta", thinking: part.text } });
+
+                        const rawSignature = part.thoughtSignature || part.thought_signature;
+                        if (rawSignature) {
+                            let signature = rawSignature;
+                            try {
+                                const decoded = Buffer.from(signature, 'base64').toString('utf-8');
+                                if (decoded && decoded.length > 0 && !decoded.includes('\ufffd')) signature = decoded;
+                            } catch (e) { /* keep original */ }
+                            events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "signature_delta", signature } });
+                        }
+                    } else {
+                        if (state.blockStarted && state.currentBlockType !== 'text') {
+                            events.push({ type: "content_block_stop", index: state.blockIndex });
+                            state.blockIndex++;
+                            state.blockStarted = false;
+                        }
+                        if (!state.blockStarted) {
+                            state.blockStarted = true;
+                            state.currentBlockType = 'text';
+                            events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "text", text: "" } });
+                        }
+                        events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "text_delta", text: part.text } });
                     }
-                    
-                    return result;
+                }
+
+                if (part.functionCall) {
+                    if (state.blockStarted) {
+                        events.push({ type: "content_block_stop", index: state.blockIndex });
+                        state.blockIndex++;
+                        state.blockStarted = false;
+                    }
+                    const toolName = normalizeToolName(part.functionCall.name);
+                    const remappedArgs = remapFunctionCallArgs(toolName, part.functionCall.args || {});
+                    const toolId = part.functionCall.id || `${toolName}-${uuidv4().split('-')[0]}`;
+                    events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "tool_use", id: toolId, name: toolName, input: {} } });
+                    events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "input_json_delta", partial_json: JSON.stringify(remappedArgs) } });
+                    events.push({ type: "content_block_stop", index: state.blockIndex });
+                    state.blockIndex++;
                 }
             }
         }
 
-        // 向后兼容：处理字符串格式
-        if (typeof geminiChunk === 'string') {
-            return {
-                type: "content_block_delta",
-                index: 0,
-                delta: {
-                    type: "text_delta",
-                    text: geminiChunk
-                }
+        if (candidate.finishReason) {
+            if (state.blockStarted) {
+                events.push({ type: "content_block_stop", index: state.blockIndex });
+                state.blockStarted = false;
+            }
+            const stopReason = candidate.finishReason === 'STOP' ? 'end_turn' :
+                               candidate.finishReason === 'MAX_TOKENS' ? 'max_tokens' :
+                               candidate.finishReason === 'TOOL_CALLS' ? 'tool_use' :
+                               candidate.finishReason.toLowerCase();
+            const messageDelta = {
+                type: "message_delta",
+                delta: { stop_reason: stopReason, stop_sequence: null }
             };
+            if (geminiChunk.usageMetadata) {
+                messageDelta.usage = {
+                    input_tokens: geminiChunk.usageMetadata.promptTokenCount || 0,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: geminiChunk.usageMetadata.cachedContentTokenCount || 0,
+                    output_tokens: geminiChunk.usageMetadata.candidatesTokenCount || 0
+                };
+            }
+            events.push(messageDelta);
+            events.push({ type: "message_stop" });
+            this.streamParams.delete(stateKey);
         }
 
-        return null;
+        return events.length > 0 ? events : null;
     }
-
     /**
      * Gemini模型列表 -> Claude模型列表
      */

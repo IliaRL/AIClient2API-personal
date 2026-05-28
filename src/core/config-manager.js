@@ -137,6 +137,20 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         }
     }
 
+    try {
+        const credsPath = path.join(os.homedir(), 'Master-C-Code-Config', 'Credentials.md');
+        const credsData = fs.readFileSync(credsPath, 'utf8');
+        const match = credsData.match(/- \*\*REQUIRED_API_KEY\*\*: `([^`]+)`/);
+        if (match && match[1]) {
+            currentConfig.REQUIRED_API_KEY = match[1];
+            logger.info('[Config] Extracted REQUIRED_API_KEY exclusively from Master-C-Code-Config/Credentials.md');
+        } else {
+            logger.warn('[Config] REQUIRED_API_KEY not found in Credentials.md');
+        }
+    } catch (err) {
+        logger.error('[Config Error] Could not read Master-C-Code-Config/Credentials.md:', err.message);
+    }
+
 
     // CLI argument definitions: { flag, configKey, type, validValues? }
     // type: 'string' | 'int' | 'bool' | 'enum'

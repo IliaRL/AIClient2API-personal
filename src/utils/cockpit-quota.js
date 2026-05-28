@@ -20,8 +20,9 @@ const ANTIGRAVITY_DISPLAY_TO_ID = {
     'gemini 3.1 pro (low)':         'gemini-3.1-pro-low',
     'gemini 3 flash':               'gemini-3-flash',
     'gemini 2.5 pro':               'gemini-2.5-pro',
-    'gemini 3.5 flash (high)':      'gemini-3.5-flash-high',
-    'gemini 3.5 flash (low)':       'gemini-3.5-flash-low',
+    'gemini 3.5 flash (high)':      'gemini-3-flash-agent',
+    'gemini 3.5 flash (medium)':    'gemini-3.5-flash-low',
+    'gemini 3.5 flash (low)':       'gemini-3.5-flash-extra-low',
     'gemini 3.1 flash image':       'gemini-3.1-flash-image',
     'gemini 3.1 flash lite':        'gemini-3.1-flash-lite',
 };
@@ -54,7 +55,7 @@ function _parseReport(text) {
         if (isNaN(pct)) continue;
 
         let modelId;
-        if (service === 'Antigravity') {
+        if (service === 'Antigravity IDE' || service === 'Antigravity') {
             modelId = ANTIGRAVITY_DISPLAY_TO_ID[metric];
         } else if (service === 'Gemini') {
             // Gemini CLI rows use model IDs directly; Antigravity uses display names

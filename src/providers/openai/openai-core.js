@@ -18,13 +18,23 @@ export class OpenAIApiService {
         this.useSystemProxy = config?.USE_SYSTEM_PROXY_OPENAI ?? false;
         logger.info(`[OpenAI] System proxy ${this.useSystemProxy ? 'enabled' : 'disabled'}`);
 
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+            'User-Agent': 'AIClient2API/3.0.6 (GitHub Models Support)'
+        };
+
+        // OpenRouter requires HTTP-Referer (and optionally X-Title) to accept requests,
+        // especially for free-tier models. Without these, requests can be rejected
+        // with 400/402 even when the API key is valid.
+        if (typeof this.baseUrl === 'string' && this.baseUrl.includes('openrouter.ai')) {
+            headers['HTTP-Referer'] = config.OPENROUTER_HTTP_REFERER || 'https://github.com/justlovemaki/AIClient2API';
+            headers['X-Title'] = config.OPENROUTER_X_TITLE || 'AIClient2API';
+        }
+
         const axiosConfig = {
             baseURL: this.baseUrl,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`,
-                'User-Agent': 'AIClient2API/3.0.6 (GitHub Models Support)'
-            },
+            headers,
             timeout: 90000,
             // Reuse a single keep-alive agent across all openai-custom / NIM /
             // GitHub Models / OpenRouter instances. Saves the TCP+TLS handshake
@@ -40,9 +50,66 @@ export class OpenAIApiService {
         return configureTLSSidecar(axiosConfig, this.config, this.config.MODEL_PROVIDER || MODEL_PROVIDER.OPENAI_CUSTOM, this.baseUrl);
     }
 
+    /**
+     * In-place strip verbose `description` fields from OpenAI-format tool schemas.
+     * Keeps tool name + parameter shape so function calling still works, but
+     * removes the natural-language descriptions that bloat the payload by
+     * thousands of bytes per tool. Safe for small-context Azure endpoints.
+     */
+    _compactToolSchemas(body) {
+        if (!Array.isArray(body.tools)) return;
+        for (const tool of body.tools) {
+            const fn = tool && tool.function;
+            if (!fn) continue;
+            if (typeof fn.description === 'string' && fn.description.length > 64) {
+                fn.description = fn.description.slice(0, 64);
+            }
+            const props = fn.parameters && fn.parameters.properties;
+            if (props && typeof props === 'object') {
+                for (const key of Object.keys(props)) {
+                    const p = props[key];
+                    if (p && typeof p.description === 'string' && p.description.length > 48) {
+                        p.description = p.description.slice(0, 48);
+                    }
+                }
+            }
+        }
+    }
+
     async callApi(endpoint, body, isRetry = false, retryCount = 0) {
         const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
         const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;  // 1 second base delay
+
+        // GitHub Models (Azure AI Inference) enforces tight per-model input-token caps
+        // (e.g. gpt-4o-mini ≈ 8K input). Claude Code's full tool schema can dwarf this
+        // and Azure responds with an opaque "Request too large (max 32MB)" 413.
+        // Pre-flight: when targeting the Azure inference endpoint, strip tool/function
+        // description fields to compact the schema and surface a clean error if the
+        // remaining payload still looks oversized.
+        const isAzureGithubModels =
+            typeof this.baseUrl === 'string' &&
+            this.baseUrl.includes('models.inference.ai.azure.com');
+        if (isAzureGithubModels && body && typeof body === 'object') {
+            try {
+                this._compactToolSchemas(body);
+                const approxBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+                // GitHub Models free tier caps at ~8K input tokens regardless of model context window.
+                // ~4 chars/token ⇒ 8K ≈ 32KB. Cap at 30KB so synthetic 413 fires before the round-trip.
+                const SOFT_LIMIT = 30 * 1024;
+                if (approxBytes > SOFT_LIMIT) {
+                    const err = new Error(
+                        `GitHub Models input too large after schema compaction: ${approxBytes} bytes ` +
+                        `exceeds soft limit ${SOFT_LIMIT}. Tool schema + system prompt likely exceeds ` +
+                        `the model's input-token cap. Select a higher-context provider (nvidia-nim / kiro / antigravity).`
+                    );
+                    err.response = { status: 413, data: { error: { message: err.message, code: 413 } } };
+                    throw err;
+                }
+            } catch (compactErr) {
+                if (compactErr.response?.status === 413) throw compactErr;
+                logger.warn(`[OpenAI API] github-models pre-flight compaction failed (non-fatal): ${compactErr.message}`);
+            }
+        }
 
         try {
             const axiosConfig = {

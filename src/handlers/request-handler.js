@@ -63,6 +63,10 @@ export function createRequestHandler(config, providerPoolManager) {
                 // ---- Diagnostic trace (lives for the entire request lifecycle) ----
                 const trace = createTrace(requestId);
                 trace.debugRequested = req.headers['x-debug-trace'] === '1' || req.headers['x-debug-trace'] === 'true';
+                // Capture Claude Code session headers for attribution (not forwarded upstream — used for logging only)
+                trace.sessionId     = req.headers['x-claude-code-session-id']       ?? null;
+                trace.agentId       = req.headers['x-claude-code-agent-id']         ?? null;
+                trace.parentAgentId = req.headers['x-claude-code-parent-agent-id']  ?? null;
                 currentConfig._trace = trace;
                 // Inject X-Proxy-Trace header just before response headers flush.
                 // For both unary (writeHead) and stream (writeHead happens early via
@@ -248,6 +252,19 @@ export function createRequestHandler(config, providerPoolManager) {
                             return true;
                         } catch (error) {
                             handleError(res, { status: 500, message: `trace endpoint error: ${error.message}` }, currentConfig.MODEL_PROVIDER, null, req);
+                            return;
+                        }
+                    }
+
+                    // Cockpit quota snapshot endpoint — exposes in-memory quota cache for the live dashboard
+                    if (method === 'GET' && path === '/api/quota') {
+                        try {
+                            const { getCacheSnapshot } = await import('../utils/cockpit-quota.js');
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ snapshot: getCacheSnapshot(), timestamp: new Date().toISOString() }));
+                            return true;
+                        } catch (error) {
+                            handleError(res, { status: 500, message: `quota endpoint error: ${error.message}` }, currentConfig.MODEL_PROVIDER, null, req);
                             return;
                         }
                     }
