@@ -48,6 +48,8 @@ export class OpenAIConverter extends BaseConverter {
         super('openai');
         // 创建 CodexConverter 实例用于委托
         this.codexConverter = new CodexConverter();
+        // Per-request stream state for stateful Claude SSE conversion (concurrent-safe).
+        this.streamParams = new Map();
     }
 
     /**
@@ -103,14 +105,14 @@ export class OpenAIConverter extends BaseConverter {
     /**
      * 转换流式响应块
      */
-    convertStreamChunk(chunk, targetProtocol, model) {
+    convertStreamChunk(chunk, targetProtocol, model, requestId) {
         switch (targetProtocol) {
             case MODEL_PROTOCOL_PREFIX.CLAUDE:
-                return this.toClaudeStreamChunk(chunk, model);
+                return this.toClaudeStreamChunk(chunk, model, requestId);
             case MODEL_PROTOCOL_PREFIX.GEMINI:
-                return this.toGeminiStreamChunk(chunk, model);
+                return this.toGeminiStreamChunk(chunk, model, requestId);
             case MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES:
-                return this.toOpenAIResponsesStreamChunk(chunk, model);
+                return this.toOpenAIResponsesStreamChunk(chunk, model, requestId);
             case MODEL_PROTOCOL_PREFIX.GROK:
                 return this.toGrokStreamChunk(chunk, model);
             case MODEL_PROTOCOL_PREFIX.OPENAI:
@@ -480,153 +482,178 @@ export class OpenAIConverter extends BaseConverter {
      * 这个方法实现了与 ClaudeConverter.toOpenAIStreamChunk 相反的转换逻辑
      * 将 OpenAI 的流式 chunk 转换为 Claude 的流式事件
      */
-    toClaudeStreamChunk(openaiChunk, model) {
+    toClaudeStreamChunk(openaiChunk, model, requestId) {
         if (!openaiChunk) return null;
 
-        // 处理 OpenAI chunk 对象
-        if (typeof openaiChunk === 'object' && !Array.isArray(openaiChunk)) {
-            const choice = openaiChunk.choices?.[0];
-            if (!choice) {
-                return null;
-            }
+        // Stateful conversion: each request gets its own state keyed by requestId.
+        // This is required because most providers (antigravity, nvidia-nim, openai-custom)
+        // do NOT send delta.role="assistant" on the first chunk, so a stateless converter
+        // never emits message_start / content_block_start and Claude Code sees orphaned
+        // content_block_delta events — causing the "starts then cuts off" symptom.
+        const _stateKeyRaw = requestId || openaiChunk.id;
+        if (!_stateKeyRaw) {
+            logger.warn('toClaudeStreamChunk: no requestId or chunk.id — falling back to "default" key; concurrent streams may share state');
+        }
+        const stateKey = _stateKeyRaw || 'default';
 
-            const delta = choice.delta;
-            const finishReason = choice.finish_reason;
+        if (!this.streamParams.has(stateKey)) {
+            this.streamParams.set(stateKey, {
+                messageStarted: false,
+                blockStarted: false,
+                currentBlockType: null, // 'text' | 'tool_use' | 'thinking'
+                blockIndex: 0,
+                // Map from OpenAI tool_call index → our blockIndex (for multi-tool streams)
+                toolIndexMap: new Map(),
+                messageId: openaiChunk.id || `msg_${uuidv4()}`,
+            });
+        }
+        const state = this.streamParams.get(stateKey);
+
+        // Backward-compat: plain string chunk
+        if (typeof openaiChunk === 'string') {
             const events = [];
-
-            // 1. 处理 role (对应 message_start)
-            if (delta?.role === "assistant") {
+            if (!state.messageStarted) {
+                state.messageStarted = true;
                 events.push({
                     type: "message_start",
-                    message: {
-                        id: openaiChunk.id || `msg_${uuidv4()}`,
-                        type: "message",
-                        role: "assistant",
-                        content: [],
-                        model: model || openaiChunk.model || "unknown",
-                        stop_reason: null,
-                        stop_sequence: null,
-                        usage: {
-                            input_tokens: openaiChunk.usage?.prompt_tokens || 0,
-                            output_tokens: 0
-                        }
-                    }
+                    message: { id: state.messageId, type: "message", role: "assistant", content: [], model: model || "unknown", stop_reason: null, stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 } }
                 });
-                // Only open a text block if this chunk isn't starting with tool_calls;
-                // tool_calls handling below opens its own content_block_start at the tool's index.
-                if (!delta?.tool_calls?.length) {
+            }
+            if (!state.blockStarted) {
+                state.blockStarted = true;
+                state.currentBlockType = 'text';
+                events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "text", text: "" } });
+            }
+            events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "text_delta", text: openaiChunk } });
+            return events;
+        }
+
+        if (typeof openaiChunk !== 'object' || Array.isArray(openaiChunk)) return null;
+
+        const choice = openaiChunk.choices?.[0];
+        if (!choice) return null;
+
+        const delta = choice.delta || {};
+        const finishReason = choice.finish_reason;
+        const events = [];
+
+        // 1. Emit message_start on the very first chunk (not gated on delta.role).
+        if (!state.messageStarted) {
+            state.messageStarted = true;
+            events.push({
+                type: "message_start",
+                message: {
+                    id: openaiChunk.id || state.messageId,
+                    type: "message",
+                    role: "assistant",
+                    content: [],
+                    model: model || openaiChunk.model || "unknown",
+                    stop_reason: null,
+                    stop_sequence: null,
+                    usage: {
+                        input_tokens: openaiChunk.usage?.prompt_tokens || 0,
+                        output_tokens: 0
+                    }
+                }
+            });
+        }
+
+        // 2. reasoning_content → thinking block
+        if (delta.reasoning_content) {
+            if (state.blockStarted && state.currentBlockType !== 'thinking') {
+                events.push({ type: "content_block_stop", index: state.blockIndex });
+                state.blockIndex++;
+                state.blockStarted = false;
+            }
+            if (!state.blockStarted) {
+                state.blockStarted = true;
+                state.currentBlockType = 'thinking';
+                events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "thinking", thinking: "" } });
+            }
+            events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "thinking_delta", thinking: delta.reasoning_content } });
+        }
+
+        // 3. tool_calls → tool_use blocks (one block per tool, tracked by OpenAI index)
+        if (delta.tool_calls?.length) {
+            for (const toolCall of delta.tool_calls) {
+                const openaiIdx = toolCall.index ?? 0;
+
+                if (toolCall.function?.name) {
+                    // New tool call starting: close any open text/thinking block first.
+                    if (state.blockStarted && state.currentBlockType !== 'tool_use') {
+                        events.push({ type: "content_block_stop", index: state.blockIndex });
+                        state.blockIndex++;
+                        state.blockStarted = false;
+                    } else if (state.blockStarted && state.toolIndexMap.has(openaiIdx)) {
+                        // Parallel tool: close previous tool block before opening next.
+                        events.push({ type: "content_block_stop", index: state.blockIndex });
+                        state.blockIndex++;
+                        state.blockStarted = false;
+                    }
+                    state.toolIndexMap.set(openaiIdx, state.blockIndex);
+                    state.blockStarted = true;
+                    state.currentBlockType = 'tool_use';
                     events.push({
                         type: "content_block_start",
-                        index: 0,
+                        index: state.blockIndex,
                         content_block: {
-                            type: "text",
-                            text: ""
+                            type: "tool_use",
+                            id: toolCall.id || `tool_${uuidv4()}`,
+                            name: toolCall.function.name,
+                            input: {}
                         }
                     });
                 }
-            }
 
-            // 2. 处理 tool_calls (对应 content_block_start 和 content_block_delta)
-            if (delta?.tool_calls) {
-                const toolCalls = delta.tool_calls;
-                for (const toolCall of toolCalls) {
-                    // 如果有 function.name，说明是工具调用开始
-                    if (toolCall.function?.name) {
-                        events.push({
-                            type: "content_block_start",
-                            index: toolCall.index || 0,
-                            content_block: {
-                                type: "tool_use",
-                                id: toolCall.id || `tool_${uuidv4()}`,
-                                name: toolCall.function.name,
-                                input: {}
-                            }
-                        });
-                    }
-
-                    // 如果有 function.arguments，说明是参数增量
-                    if (toolCall.function?.arguments) {
-                        events.push({
-                            type: "content_block_delta",
-                            index: toolCall.index || 0,
-                            delta: {
-                                type: "input_json_delta",
-                                partial_json: toolCall.function.arguments
-                            }
-                        });
-                    }
+                if (toolCall.function?.arguments) {
+                    const blockIdx = state.toolIndexMap.get(openaiIdx) ?? state.blockIndex;
+                    events.push({
+                        type: "content_block_delta",
+                        index: blockIdx,
+                        delta: { type: "input_json_delta", partial_json: toolCall.function.arguments }
+                    });
                 }
             }
-
-            // 3. 处理 reasoning_content (对应 thinking 类型的 content_block)
-            if (delta?.reasoning_content) {
-                events.push({
-                    type: "content_block_delta",
-                    index: 0,
-                    delta: {
-                        type: "thinking_delta",
-                        thinking: delta.reasoning_content
-                    }
-                });
-            }
-
-            // 4. 处理普通文本 content (对应 text 类型的 content_block)
-            if (delta?.content) {
-                events.push({
-                    type: "content_block_delta",
-                    index: 0,
-                    delta: {
-                        type: "text_delta",
-                        text: delta.content
-                    }
-                });
-            }
-
-            // 5. 处理 finish_reason (对应 message_delta 和 message_stop)
-            if (finishReason) {
-                const stopReason = mapFinishReason(finishReason, 'openai', 'anthropic');
-
-                events.push({
-                    type: "content_block_stop",
-                    index: 0
-                });
-                // 发送 message_delta
-                events.push({
-                    type: "message_delta",
-                    delta: {
-                        stop_reason: stopReason,
-                        stop_sequence: null
-                    },
-                    usage: {
-                        input_tokens: openaiChunk.usage?.prompt_tokens || 0,
-                        cache_creation_input_tokens: 0,
-                        cache_read_input_tokens: openaiChunk.usage?.prompt_tokens_details?.cached_tokens || 0,
-                        output_tokens: openaiChunk.usage?.completion_tokens || 0
-                    }
-                });
-
-                // 发送 message_stop
-                events.push({
-                    type: "message_stop"
-                });
-            }
-
-            return events.length > 0 ? events : null;
         }
 
-        // 向后兼容：处理字符串格式
-        if (typeof openaiChunk === 'string') {
-            return {
-                type: "content_block_delta",
-                index: 0,
-                delta: {
-                    type: "text_delta",
-                    text: openaiChunk
+        // 4. text content → text block (open lazily on first text delta)
+        if (delta.content) {
+            if (state.blockStarted && state.currentBlockType !== 'text') {
+                events.push({ type: "content_block_stop", index: state.blockIndex });
+                state.blockIndex++;
+                state.blockStarted = false;
+            }
+            if (!state.blockStarted) {
+                state.blockStarted = true;
+                state.currentBlockType = 'text';
+                events.push({ type: "content_block_start", index: state.blockIndex, content_block: { type: "text", text: "" } });
+            }
+            events.push({ type: "content_block_delta", index: state.blockIndex, delta: { type: "text_delta", text: delta.content } });
+        }
+
+        // 5. finish_reason → close open block + message_delta + message_stop
+        if (finishReason) {
+            if (state.blockStarted) {
+                events.push({ type: "content_block_stop", index: state.blockIndex });
+                state.blockStarted = false;
+            }
+            const stopReason = mapFinishReason(finishReason, 'openai', 'anthropic');
+            events.push({
+                type: "message_delta",
+                delta: { stop_reason: stopReason, stop_sequence: null },
+                usage: {
+                    input_tokens: openaiChunk.usage?.prompt_tokens || 0,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: openaiChunk.usage?.prompt_tokens_details?.cached_tokens || 0,
+                    output_tokens: openaiChunk.usage?.completion_tokens || 0
                 }
-            };
+            });
+            events.push({ type: "message_stop" });
+            // Clean up per-request state to avoid memory leak on long-running instances.
+            this.streamParams.delete(stateKey);
         }
 
-        return null;
+        return events.length > 0 ? events : null;
     }
 
     /**
@@ -823,12 +850,15 @@ export class OpenAIConverter extends BaseConverter {
                                     if (typeof responseContent !== 'string') {
                                         responseContent = JSON.stringify(responseContent);
                                     }
-                                    node.parts.push({
-                                        functionResponse: {
-                                            name: fnName,
-                                            response: { result: responseContent }
-                                        }
-                                    });
+                                    const functionResponse = {
+                                        name: fnName,
+                                        response: { result: responseContent }
+                                    };
+                                    // Pair the response with the original tool_use id so
+                                    // Antigravity's Claude bridge can match it to the assistant
+                                    // tool_use block (avoids "tool_use.id: Field required").
+                                    if (item.tool_use_id) functionResponse.id = item.tool_use_id;
+                                    node.parts.push({ functionResponse });
                                 }
                                 break;
                             }
@@ -905,11 +935,14 @@ export class OpenAIConverter extends BaseConverter {
                             const fid = item.id || '';
                             const fname = item.name || '';
                             const argsObj = typeof item.input === 'string' ? (() => { try { return JSON.parse(item.input); } catch(e) { return {}; } })() : (item.input || {});
+                            const functionCall = { name: fname, args: argsObj };
+                            // Preserve the upstream tool-use id. Antigravity's Claude bridge
+                            // (Vertex) requires tool_use.id on the assistant turn when echoing
+                            // history back — without it the second turn returns
+                            // "messages.N.content.M.tool_use.id: Field required" (HTTP 400).
+                            if (fid) functionCall.id = fid;
                             node.parts.push({
-                                functionCall: {
-                                    name: fname,
-                                    args: argsObj
-                                },
+                                functionCall,
                                 thoughtSignature: OpenAIConverter.GEMINI_OPENAI_THOUGHT_SIGNATURE
                             });
                         } else if (item.type === 'image_url' && item.image_url) {
@@ -953,11 +986,11 @@ export class OpenAIConverter extends BaseConverter {
                             argsObj = {};
                         }
 
+                        const functionCall = { name: fname, args: argsObj };
+                        // Preserve the upstream tool-call id (see tool_use branch above).
+                        if (fid) functionCall.id = fid;
                         node.parts.push({
-                            functionCall: {
-                                name: fname,
-                                args: argsObj
-                            },
+                            functionCall,
                             thoughtSignature: OpenAIConverter.GEMINI_OPENAI_THOUGHT_SIGNATURE
                         });
 
@@ -983,14 +1016,13 @@ export class OpenAIConverter extends BaseConverter {
                         responseContent = JSON.stringify(responseContent);
                     }
                     
-                    toolNode.parts.push({
-                        functionResponse: {
-                            name: functionName,
-                            response: {
-                                result: responseContent
-                            }
-                        }
-                    });
+                    const functionResponse = {
+                        name: functionName,
+                        response: { result: responseContent }
+                    };
+                    // Pair with the original tool_call id (see tool_result branch above).
+                    if (toolCallId) functionResponse.id = toolCallId;
+                    toolNode.parts.push({ functionResponse });
                     
                     if (toolNode.parts.length > 0) {
                         processedMessages.push(toolNode);
@@ -1367,15 +1399,14 @@ export class OpenAIConverter extends BaseConverter {
         if (message.tool_calls && message.tool_calls.length > 0) {
             for (const toolCall of message.tool_calls) {
                 if (toolCall.type === 'function') {
+                    let parsedArgs = toolCall.function.arguments;
+                    if (typeof parsedArgs === 'string') {
+                        try { parsedArgs = JSON.parse(parsedArgs); } catch { /* keep raw string */ }
+                    }
                     parts.push({
                         functionCall: {
                             name: toolCall.function.name,
-                            args: dynamicFlattenToolArguments(
-                                toolCall.function.name,
-                                typeof toolCall.function.arguments === 'string'
-                                    ? JSON.parse(toolCall.function.arguments)
-                                    : toolCall.function.arguments
-                            )
+                            args: dynamicFlattenToolArguments(toolCall.function.name, parsedArgs)
                         }
                     });
                 }
