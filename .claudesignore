@@ -1,37 +1,50 @@
-# Node/Yarn/PNPM Dependencies
-node_modules
+# Ignore heavy dependency folders
+node_modules/
+venv/
+.venv/
+env/
+.env/
+__pycache__/
+*.pyc
 
-# Duplicate Project Reference (Major Crash Cause)
-TEST_REF
+# Ignore compiled/build outputs
+build/
+dist/
+out/
+target/
+*.node
+*.dylib
+*.so
+*.dll
 
-# Compiled Binary & Build Outputs
-build
-dist
-out
-target
-
-# AI Agent Caches & Internal State
-.claude
-.gemini
-.remember
-.playwright-mcp
-.serena
-.worktrees
-.vscode
-
-# Databases, Caches & Temporary Files
+# Ignore caches and temporary data
+.claude/
+.gemini/
+.remember/
+.playwright-mcp/
+.serena/
+.worktrees/
+.vscode/
+.antigravity/
+.antigravity-ide/
+logs/
+*.log
 *.db
 *.db-shm
 *.db-wal
-*.log
-logs
-.DS_Store
 
-# Lockfiles (High-density, low-semantic value)
+# Ignore system diagnostics and massive files
+sysdiagnose*
+*.ips
+*.panic
+*.spin
+*.archive
+
+# Lockfiles
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
 
-# Version Control
-.git
-.github
+# Git
+.git/
+

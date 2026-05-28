@@ -1,331 +1,359 @@
-## Claude code cli plugins & Resources
-
-# Skills:
-
-**Prevents destructive data operations and table deletions within Google Cloud environments.**
-/data-agent-kit-starter-pack:accidental-data-loss-prevention
-
-**Coordinates and manages multiple AI agents or tasks within the AI-DevKit framework.**
-/ai-devkit:agent-orchestration
-
-**Retrieves and manages identified security vulnerabilities and open alerts from Aikido.**
-/aikido:issues
-
-**Configures and manages automated data movement using BigQuery Data Transfer Service.**
-/data-agent-kit-starter-pack:bigquery-data-transfer-service
-
-**Initiates structured ideation sessions to define requirements and system design before coding.**
-/superpowers:brainstorming
-
-**Analyzes interactions to build and refine a profile of the user's preferences and environment.**
-/adaptive-agent:build-user-profile
-
-**Assists in scaffolding and architecting data-driven applications on Google Cloud.**
-/data-agent-kit-starter-pack:building-data-apps
-
-**Analyzes your project to recommend and configure Claude automation setups and hooks.**
-/claude-code-setup:claude-automation-recommender
-
-**Optimizes and structures the project's `CLAUDE.md` file for better agent context retention.**
-/claude-md-management:claude-md-improver
-
-**Generates scripts and routines to automatically sanitize and format raw datasets.**
-/data-agent-kit-starter-pack:data-autocleaning
-
-**Helps construct and manage Dataform SQLX files and pipelines within BigQuery.**
-/data-agent-kit-starter-pack:dataform-bigquery
-
-**Generates dbt models, tests, and transformations specific to BigQuery architectures.**
-/data-agent-kit-starter-pack:dbt-bigquery
-
-**Provides systematic guidance across the entire software development lifecycle (planning to deployment).**
-/ai-devkit:dev-lifecycle
-
-**Assists in writing, optimizing, and debugging standard SQL queries and schemas in BigQuery.**
-/data-agent-kit-starter-pack:developing-with-bigquery
-
-**Scans and inventories available datasets, tables, and views across your GCP environment.**
-/data-agent-kit-starter-pack:discovering-gcp-data-assets
-
-**Spawns isolated subagents to work on independent tasks concurrently for faster execution.**
-/superpowers:dispatching-parallel-agents
-
-**Automatically generates inline comments, READMEs, and technical documentation for codebases.**
-/ai-devkit:document-code
-
-**Systematically works through predefined task plans with human checkpoints.**
-/superpowers:executing-plans
-
-**Validates tests, reviews changes, and prepares a development branch for merging or PR creation.**
-/superpowers:finishing-a-development-branch
-
-**Checks and enforces proper Application Default Credentials (ADC) for Google Cloud access.**
-/data-agent-kit-starter-pack:gcloud-auth-verification
-
-**Diagnoses and resolves issues within GCP Cloud Composer (Managed Airflow) environments.**
-/data-agent-kit-starter-pack:gcp-composer-troubleshooting
-
-**Designs and sets up robust data engineering pipelines across Google Cloud services.**
-/data-agent-kit-starter-pack:gcp-data-pipelines
-
-**Writes and debugs Apache Beam code for processing streaming or batch data on Cloud Dataflow.**
-/data-agent-kit-starter-pack:gcp-dataflow
-
-**Configures pipeline scheduling, dependency management, and workflow orchestration.**
-/data-agent-kit-starter-pack:gcp-pipeline-orchestration
-
-**Generates infrastructure-as-code (like Terraform) to provision GCP data pipeline resources.**
-/data-agent-kit-starter-pack:gcp-pipeline-resource-provisioning
-
-**Helps write, optimize, and deploy Apache Spark jobs on GCP (Dataproc or Serverless Spark).**
-/data-agent-kit-starter-pack:gcp-spark
-
-**Configures API response caching strategies to optimize performance and reduce request costs.**
-/api-cache-manager:managing-api-cache
-
-**Handles `pip`, `poetry`, or `requirements.txt` configurations specifically for data pipelines.**
-/data-agent-kit-starter-pack:managing-python-dependencies
-
-**Stores and retrieves persistent context and architectural decisions across coding sessions.**
-/ai-devkit:memory
-
-**Implements machine learning models using BigQuery ML (XGBoost, KMEANS) following GCP best practices.**
-/data-agent-kit-starter-pack:ml-best-practices
-
-**Assists in creating and debugging interactive data science notebooks in the GCP environment.**
-/data-agent-kit-starter-pack:notebook-guidance
-
-**Refines and optimizes raw prompts into structured, highly effective LLM instructions.**
-/severity1-marketplace:prompt-improver
-
-**Processes incoming code reviews, explains feedback, and implements requested changes.**
-/superpowers:receiving-code-review
-
-**A utility to force the agent to store a specific piece of information into persistent memory.**
-/remember:remember
-
-**Analyzes local code changes against the project plan and generates structured review requests.**
-/superpowers:requesting-code-review
-
-**Triggers Aikido to scan the codebase for exposed secrets, malware, and security vulnerabilities.**
-/aikido:scan
-
-**Evaluates code implementations for security flaws, compliance issues, and best practice violations.**
-/ai-devkit:security-review
-
-**Integrates and configures the Sentry SDK for native Android applications.**
-/sentry:sentry-android-sdk
-
-**Integrates and configures the Sentry SDK for frontend vanilla browser environments.**
-/sentry:sentry-browser-sdk
-
-**Integrates and configures the Sentry SDK for Cloudflare Workers.**
-/sentry:sentry-cloudflare-sdk
-
-**Integrates and configures the Sentry SDK for iOS/macOS (Cocoa) applications.**
-/sentry:sentry-cocoa-sdk
-
-**Uses Sentry trace and error data to inform and perform code reviews on pull requests.**
-/sentry:sentry-code-review
-
-**Configures custom alerting rules and routing within the Sentry dashboard.**
-/sentry:sentry-create-alert
-
-**Integrates and configures the Sentry SDK for .NET applications.**
-/sentry:sentry-dotnet-sdk
-
-**Integrates and configures the Sentry SDK for Elixir applications.**
-/sentry:sentry-elixir-sdk
-
-**Helps initialize new Sentry features like Session Replay, Profiling, or Performance Monitoring.**
-/sentry:sentry-feature-setup
-
-**Uses Sentry's Seer AI to analyze error root causes and apply code fixes directly.**
-/sentry:sentry-fix-issues
-
-**Integrates and configures the Sentry SDK for Flutter applications.**
-/sentry:sentry-flutter-sdk
-
-**Integrates and configures the Sentry SDK for Go (Golang) applications.**
-/sentry:sentry-go-sdk
-
-**Integrates and configures the Sentry SDK for NestJS server applications.**
-/sentry:sentry-nestjs-sdk
-
-**Integrates and configures the Sentry SDK for Next.js (React) applications.**
-/sentry:sentry-nextjs-sdk
-
-**Integrates and configures the Sentry SDK for Node.js backend environments.**
-/sentry:sentry-node-sdk
-
-**Sets up OpenTelemetry (OTel) exporters to route trace data into Sentry.**
-/sentry:sentry-otel-exporter-setup
-
-**Integrates and configures the Sentry SDK for PHP applications.**
-/sentry:sentry-php-sdk
-
-**Automates pull request reviews using context from Sentry production errors.**
-/sentry:sentry-pr-code-review
-
-**Integrates and configures the Sentry SDK for Python applications.**
-/sentry:sentry-python-sdk
-
-**Integrates and configures the Sentry SDK for React Native applications.**
-/sentry:sentry-react-native-sdk
-
-**Integrates and configures the Sentry SDK for React Router framework setups.**
-/sentry:sentry-react-router-framework-sdk
-
-**Integrates and configures the Sentry SDK for standard React single-page applications.**
-/sentry:sentry-react-sdk
-
-**Integrates and configures the Sentry SDK for Ruby/Rails applications.**
-/sentry:sentry-ruby-sdk
-
-**A general setup wizard for initializing Sentry SDKs in new codebases.**
-/sentry:sentry-sdk-setup
-
-**Generates custom agentic skills tailored to specific Sentry workflows.**
-/sentry:sentry-sdk-skill-creator
-
-**Updates existing Sentry SDKs to the latest versions and handles breaking changes.**
-/sentry:sentry-sdk-upgrade
-
-**Configures Sentry to monitor AI LLM token usage, prompt latency, and agent errors.**
-/sentry:sentry-setup-ai-monitoring
-
-**Integrates and configures the Sentry SDK for Svelte applications.**
-/sentry:sentry-svelte-sdk
-
-**Integrates and configures the Sentry SDK for TanStack Start applications.**
-/sentry:sentry-tanstack-start-sdk
-
-**Automates issue triage, assignment, and resolution workflows within Sentry.**
-/sentry:sentry-workflow
-
-**Initializes Aikido security configurations and hooks for the current repository.**
-/aikido:setup
-
-**Analyzes complex code implementations and refactors them for simplicity and readability.**
-/ai-devkit:simplify-implementation
-
-**A meta-tool that helps the user design, scaffold, and compile new custom skills for Claude.**
-/skill-creator:skill-creator
-
-**Evaluates existing agent skills for efficiency, logic flaws, and potential improvements.**
-/adaptive-agent:skill-review
-
-**Provides a methodical approach to tracking down and fixing bugs using root cause analysis.**
-/ai-devkit:structured-debug
-
-**Spawns isolated subagents to handle distinct tasks in a structured plan concurrently.**
-/superpowers:subagent-driven-development
-
-**Interacts with Supabase to manage tables, edge functions, Auth, and Storage.**
-/supabase:supabase
-
-**Evaluates and enforces PostgreSQL schema and query best practices within a Supabase project.**
-/supabase:supabase-postgres-best-practices
-
-**A 4-phase structured debugging process that prioritizes gathering evidence before guessing.**
-/superpowers:systematic-debugging
-
-**Enforces Test-Driven Development (Red-Green-Refactor) for code generation tasks.**
-/ai-devkit:tdd
-
-**Focuses the agent on generating high-quality API docs, user manuals, and architecture specs.**
-/ai-devkit:technical-writer
-
-**Enforces writing failing tests before implementing any functional code changes.**
-/superpowers:test-driven-development
-
-**Creates isolated git worktrees to experiment with code safely without polluting the main branch.**
-/superpowers:using-git-worktrees
-
-**A meta-command that instructs Claude Code on how to effectively utilize the Superpowers framework.**
-/superpowers:using-superpowers
-
-**Compiles and packages custom Vault configurations or secure skill environments.**
-/skill-creator:vault-compile
-
-**Forces a comprehensive test suite run and validation check before marking a task complete.**
-/superpowers:verification-before-completion
-
-**Validates that implemented code meets the initial spec and design document constraints.**
-/ai-devkit:verify
-
-**Breaks down approved architectures into bite-sized, actionable tasks (2-5 mins each) with validation steps.**
-/superpowers:writing-plans
-
-**Helps codify recurring workflows into new, reusable agentic skills.**
-/superpowers:writing-skills
-
-# MCP's:
-
-**In-memory data store MCP; allows the agent to interact with, query, and manage Redis databases.**
-redis
-
-**Utility MCP that forces the agent to break down complex reasoning into explicit, sequential steps.**
-sequential-thinking
-
-**Connects the CLI agent to the broader Claude.ai web ecosystem for context sharing.**
-claude.ai
-
-**Allows Claude to read, search, and parse documents directly from your Google Drive.**
-claude.ai Google Drive
-
-**Built-in MCPs:**
-
-**Provides the backend tools for Aikido to scan code and manage security vulnerabilities.**
-plugin:aikido:aikido-mcp
-
-**Manages deep contextual memory and workflow states across extended coding sessions.**
-plugin:context7:context7
-
-**Tools to query, manage, and interact with Google Cloud AlloyDB for PostgreSQL.**
-plugin:data-agent-kit-starter-pack:datacloud_alloydb-postgres_toolbox
-
-**Administrative and provisioning commands for GCP AlloyDB clusters.**
-plugin:data-agent-kit-starter-pack:datacloud_alloydb-postgres-admi
-
-**Executes SQL queries, manages datasets, and interacts with the BigQuery API.**
-plugin:data-agent-kit-starter-pack:datacloud_bigquery_toolbox
-
-**Tools to query and interact with standard Google Cloud SQL PostgreSQL instances.**
-plugin:data-agent-kit-starter-pack:datacloud_cloud-sql-postgresql_toolbox
-
-**Administrative tools for managing standard GCP Cloud SQL instances.**
-plugin:data-agent-kit-starter-pack:datacloud_cloud-sql-postgresql-a
-
-**Tools to submit and manage Hadoop/Spark jobs on GCP Dataproc.**
-plugin:data-agent-kit-starter-pack:datacloud_dataproc_toolbox
-
-**Integrates with GCP Data Catalog for data discovery, metadata management, and governance.**
-plugin:data-agent-kit-starter-pack:datacloud_knowledge_catalog_to
-
-**Tools to submit and manage Serverless Apache Spark workloads on GCP.**
-plugin:data-agent-kit-starter-pack:datacloud_serverless-spark_too
-
-**Executes queries and manages schemas for Google Cloud Spanner distributed databases.**
-plugin:data-agent-kit-starter-pack:datacloud_spanner_toolbox
-
-**Facilitates interaction with Jupyter notebooks or GCP Vertex AI Workbench environments.**
-plugin:data-agent-kit-starter-pack:notebook
-
-**Tools to generate charts, graphs, and data visualization scripts from processed data.**
-plugin:data-agent-kit-starter-pack:visualization
-
-**Provides tools to interact with GitHub APIs (manage PRs, issues, repos, and code searches).**
-plugin:github:github
-
-**Connects to the Linear API to query, update, and manage project management issues and tickets.**
-plugin:linear:linear
-
-**Provides browser automation tools for E2E testing, scraping, and visual verification.**
-plugin:playwright:playwright
-
-**Exposes Sentry APIs so the agent can query error logs, traces, and Seer analysis data.**
-plugin:sentry:sentry
-
-**Connects directly to your Supabase project to run SQL, manage schemas, and interact with the database.**
-plugin:supabase:supabase
+  ---
+  Skills
+  
+  Superpowers Plugin
+
+  ┌────────────────────────────────────────────┬───────────────────────────────────────────────────────────────┐
+  │                   Skill                    │                            Purpose                            │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:using-superpowers              │ Meta-skill — establishes how to find and use all other skills │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:brainstorming                  │ Pre-implementation creative exploration                       │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:writing-plans                  │ Multi-step implementation planning                            │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:executing-plans                │ Execute written plans with review checkpoints                 │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:subagent-driven-development    │ Parallel task execution via subagents                         │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:dispatching-parallel-agents    │ Orchestrate 2+ independent tasks in parallel                  │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:test-driven-development        │ TDD workflow — tests before implementation                    │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:systematic-debugging           │ Structured bug/failure investigation                          │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:verification-before-completion │ Evidence-based completion claims                              │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:finishing-a-development-branch │ Branch completion: merge, PR, or cleanup                      │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:receiving-code-review          │ Handle and verify code review feedback                        │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:requesting-code-review         │ Pre-merge code review                                         │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:using-git-worktrees            │ Isolated workspace via git worktrees                          │
+  ├────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+  │ superpowers:writing-skills                 │ Create/edit/verify skills                                     │
+  └────────────────────────────────────────────┴───────────────────────────────────────────────────────────────┘
+
+  AI DevKit Plugin
+
+  ┌────────────────────────────────┬─────────────────────────────────────────────────┐
+  │             Skill              │                     Purpose                     │
+  ├────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:dev-lifecycle        │ Full SDLC — 8-phase structured workflow         │
+  ├────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:new-requirement      │ Scaffold feature docs from requirements         │
+  ├────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:review-requirements  │ Review feature requirements for completeness    │
+  ├────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:review-design        │ Review feature design                           │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:execute-plan            │ Execute a feature plan task by task             │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:update-planning         │ Sync planning docs with implementation progress │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:check-implementation    │ Compare implementation vs design/requirements   │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:writing-test            │ Add tests for new features                      │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:tdd                     │ TDD — write failing test before production code │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:code-review             │ Pre-push code review                            │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:security-review         │ OWASP/prompt-injection security audit           │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:structured-debug        │ Structured debugging before code changes        │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:verify                  │ Evidence-based completion enforcement           │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:simplify-implementation │ Reduce complexity and technical debt            │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:document-code           │ Document a module/file/function                 │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:memory                  │ Durable knowledge layer (memory CLI)            │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:remember                │ Store reusable guidance in memory service       │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:agent-orchestration     │ Multi-agent workflow coordination               │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ ai-devkit:technical-writer        │ Review/improve documentation                    │
+  └───────────────────────────────────┴─────────────────────────────────────────────────┘
+
+  Sentry Plugin
+
+  ┌─────────────────────────────┬─────────────────────────────────────────────────────┐
+  │            Skill            │                       Purpose                       │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────┤
+  │ sentry:sentry-sdk-setup     │ Add Sentry SDK to any language/framework            │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────┤
+  │ sentry:sentry-feature-setup │ Configure Sentry features (AI/LLM, OTel, alerts)    │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────┤
+  │ sentry:sentry-workflow      │ Fix prod issues using Sentry context                │
+  ├─────────────────────────────┼─────────────────────────────────────────────────────┤
+  │ sentry:seer                 │ Natural-language queries against Sentry environment │
+  └─────────────────────────────┴─────────────────────────────────────────────────────┘
+
+  Supabase Plugin
+
+  ┌───────────────────────────────────────────┬──────────────────────────────────────────────────────────────────┐
+  │                   Skill                   │                             Purpose                              │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+  │ supabase:supabase                         │ All Supabase tasks — DB, Auth, Edge Functions, Realtime, Storage │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+  │ supabase:supabase-postgres-best-practices │ Postgres performance optimization                                │
+  └───────────────────────────────────────────┴──────────────────────────────────────────────────────────────────┘
+
+  Aikido Security Plugin
+
+  ┌───────────────┬─────────────────────────────────────────┐
+  │     Skill     │                 Purpose                 │
+  ├───────────────┼─────────────────────────────────────────┤
+  │ aikido:scan   │ SAST scan on modified/generated code    │
+  ├───────────────┼─────────────────────────────────────────┤
+  │ aikido:issues │ List/triage Aikido security findings    │
+  ├───────────────┼─────────────────────────────────────────┤
+  │ aikido:setup  │ Configure Aikido API key and verify MCP │
+  └───────────────┴─────────────────────────────────────────┘
+
+  Severity1 Marketplace Plugin
+
+  ┌─────────────────────────────────────────┬─────────────────────────────────┐
+  │                  Skill                  │             Purpose             │
+  ├─────────────────────────────────────────┼─────────────────────────────────┤
+  │ severity1-marketplace:severity-classify │ Classify issue severity (S1–S4) │
+  ├─────────────────────────────────────────┼─────────────────────────────────┤
+  │ severity1-marketplace:prompt-improve    │ Improve plugin/skill prompts    │
+  ├─────────────────────────────────────────┼─────────────────────────────────┤
+  │ severity1-marketplace:prompt-improver   │ Deeper prompt quality audit     │
+  └─────────────────────────────────────────┴─────────────────────────────────┘
+
+  Skill Creator Plugin
+
+  ┌─────────────────────────────┬──────────────────────────────────────────────────┐
+  │            Skill            │                     Purpose                      │
+  ├─────────────────────────────┼──────────────────────────────────────────────────┤
+  │ skill-creator:skill-creator │ Create, modify, eval, and benchmark skills       │
+  ├─────────────────────────────┼──────────────────────────────────────────────────┤
+  │ skill-creator:vault-compile │ Compile raw/ files into the wiki/ knowledge base │
+  └─────────────────────────────┴──────────────────────────────────────────────────┘
+
+  Data Agent Kit (GCP) Plugin
+
+  ┌────────────────────────────────────────────────────────────────┬────────────────────────────────────────────┐
+  │                             Skill                              │                  Purpose                   │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcp-pipeline-orchestration         │ Cloud Composer DAG/orchestration           │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcp-pipeline-resource-provisioning │ Declarative GCP resource provisioning      │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcp-data-pipelines                 │ Entry point for all GCP data pipeline work │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcp-spark                          │ Spark on Dataproc/Serverless               │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcp-dataflow                       │ Apache Beam / Cloud Dataflow               │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcp-composer-troubleshooting       │ Troubleshoot Composer/Airflow failures             │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:developing-with-bigquery           │ BigQuery queries, BigFrames, BQML                  │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:dataform-bigquery                  │ Dataform pipeline code for BigQuery                │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:dbt-bigquery                       │ dbt models and pipelines for BigQuery              │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:bigquery-data-transfer-service     │ BQ DTS configuration and inspection                │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:notebook-guidance                  │ Jupyter notebooks with BigQuery                    │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:building-data-apps                 │ React/Streamlit data dashboards                    │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:discovering-gcp-data-assets        │ Find/inspect GCP data assets                       │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:data-autocleaning                  │ Data quality and transformation                    │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:ml-best-practices                  │ ML tasks (clustering, classification, forecasting) │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:managing-python-dependencies       │ Python dependency management                       │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:accidental-data-loss-prevention    │ Irreversible-action guardrails                     │
+  ├────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
+  │ data-agent-kit-starter-pack:gcloud-auth-verification           │ GCP ADC authentication issues                      │
+  └────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+
+  API Cache Manager Plugin
+
+  ┌──────────────────────────────────────┬─────────────────────────────────────────┐
+  │                Skill                 │                 Purpose                 │
+  ├──────────────────────────────────────┼─────────────────────────────────────────┤
+  │ api-cache-manager:implement-caching  │ Multi-level API caching (Redis, CDN)    │
+  ├──────────────────────────────────────┼─────────────────────────────────────────┤
+  │ api-cache-manager:managing-api-cache │ Manage Redis/Memcached/CDN cache layers │
+  └──────────────────────────────────────┴─────────────────────────────────────────┘
+
+  Claude MD Management Plugin
+
+  ┌─────────────────────────────────────────┬─────────────────────────────────────────┐
+  │                  Skill                  │                 Purpose                 │
+  ├─────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ claude-md-management:revise-claude-md   │ Update CLAUDE.md with session learnings │
+  ├─────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ claude-md-management:claude-md-improver │ Audit and improve all CLAUDE.md files   │
+  └─────────────────────────────────────────┴─────────────────────────────────────────┘
+
+  Claude Code Setup Plugin
+
+  ┌─────────────────────────────────────────────────┬────────────────────────────────────────────────┐
+  │                      Skill                      │                    Purpose                     │
+  ├─────────────────────────────────────────────────┼────────────────────────────────────────────────┤
+  │ claude-code-setup:claude-automation-recommender │ Recommend hooks, subagents, MCPs for a project │
+  └─────────────────────────────────────────────────┴────────────────────────────────────────────────┘
+
+  Adaptive Agent Plugin
+
+  ┌───────────────────────────────────┬──────────────────────────────────┐
+  │               Skill               │             Purpose              │
+  ├───────────────────────────────────┼──────────────────────────────────┤
+  │ adaptive-agent:build-user-profile │ Build/update user profile memory │
+  ├───────────────────────────────────┼──────────────────────────────────┤
+  │ adaptive-agent:skill-review       │ Audit all skills for staleness   │
+  └───────────────────────────────────┴──────────────────────────────────┘
+
+  Local / Standalone Skills
+
+  ┌──────────────┬─────────────────────────────────────────────────────┐
+  │    Skill     │                       Purpose                       │
+  ├──────────────┼─────────────────────────────────────────────────────┤
+  │ config       │ Manage AIClient2API + global Claude settings        │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ proxy-repair    │ Structured routing audit for AIClient2API           │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ notebooklm      │ Full Google NotebookLM API access                   │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ claude-api      │ Build/debug Claude API / Anthropic SDK apps         │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ remember        │ Save session state for next session                 │
+  ├──────────────────┼─────────────────────────────────────────────────────┤
+  │ verify           │ Run the app and observe behavior to confirm changes │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ run                      │ Launch this project's app                           │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ init                     │ Initialize a new CLAUDE.md                          │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ review                   │ Review a pull request                               │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ code-review              │ Review current diff (inline PR comments optional)   │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ security-review          │ Security review of pending branch changes           │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ loop                     │ Run a prompt/command on a recurring interval        │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ schedule                 │ Create/manage scheduled remote agents (cron)        │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ update-config            │ Configure Claude Code harness via settings.json     │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ keybindings-help         │ Customize keyboard shortcuts                        │
+  ├──────────────────────────┼─────────────────────────────────────────────────────┤
+  │ fewer-permission-prompts │ Scan transcripts and add tool allowlist             │
+  └──────────────────────────┴─────────────────────────────────────────────────────┘
+
+  ---
+  MCP Servers
+
+  GitHub (plugin:github)
+
+  Full GitHub API access — repos, issues, PRs, branches, releases, code search, secret scanning, Copilot review.
+
+  Linear (plugin:linear)
+
+  Issue tracking — issues, projects, milestones, comments, documents, diffs, cycles, labels, teams, users.
+
+  Sentry (plugin:sentry)
+
+  Error monitoring — issues, events, replays, profiles, releases, projects, organizations, Seer AI analysis.
+
+  Supabase (plugin:supabase)
+
+  Supabase MCP — search_docs (additional tools via CLI/SDK).
+
+  Aikido (plugin:aikido)
+
+  Security scanning — aikido_full_scan, aikido_issues_list.
+
+  Context7 (plugin:context7)
+
+  Live library documentation fetcher — resolve-library-id, query-docs.
+
+  Playwright (plugin:playwright)
+
+  Browser automation — navigate, click, fill, screenshot, evaluate JS, network requests, file upload, dialog handling.
+
+  Google Drive (claude_ai_Google_Drive)
+
+  File operations — read, create, copy, download, search, metadata, permissions, list recent files.
+
+  Redis (mcp__redis)
+
+  Key-value store — get, set, delete, list.
+
+  Sequential Thinking (mcp__sequential-thinking)
+
+  Structured multi-step reasoning — sequentialthinking.
+
+  Data Agent Kit — GCP Toolboxes (plugin:data-agent-kit-starter-pack)
+
+  ┌────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │          Toolbox           │                                                                       Tools                                                                        │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ BigQuery                   │ execute_sql, ask_data_insights, analyze_contribution, forecast, get_dataset_info, get_table_info, list_dataset_ids, list_table_ids, search_catalog │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ AlloyDB Postgres Admin     │ create/get cluster, instance, user; list clusters, instances, users; wait_for_operation                                                            │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Cloud SQL PostgreSQL Admin │ create/get/list instance, database, user; create_backup, restore_backup, postgres_upgrade_precheck, clone_instance, wait_for_operation             │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Dataproc                   │ get/list cluster, get/list job                                                                                                                     │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Serverless Spark           │ create pyspark/spark batch, cancel batch, get/list batch, get/list session, get session_template                                                   │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Knowledge Catalog          │ lookup_context, lookup_entry, search_aspect_types, search_dq_scans, search_entries                                                                 │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Notebook                   │ create_notebook, insert/read/replace/delete/list/search cells, get notebook info, execute cell, get cell outputs                                   │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Visualization              │ render_chart                                                                                                                                       │
+  └────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  ---
+  Built-in Claude Code Agent Types
+
+  ┌───────────────────────────────────────┬──────────────────────────────────────────┐
+  │                 Agent                 │                 Purpose                  │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ claude                                │ General-purpose catch-all                │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ claude-code-guide                     │ Claude Code CLI / API / SDK questions    │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ code-simplifier                       │ Simplify and refactor code               │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ Explore                               │ Fast read-only codebase search           │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ general-purpose                       │ Multi-step research and task execution   │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ Plan                                  │ Architecture and implementation planning │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ severity1-marketplace:severity-triage │ Automated severity triage                │
+  ├───────────────────────────────────────┼──────────────────────────────────────────┤
+  │ statusline-setup                      │ Configure Claude Code status line        │
+  └───────────────────────────────────────┴──────────────────────────────────────────┘
+
+  ---
+  Summary Count
+
+  ┌──────────────────────┬─────────────────┐
+  │       Category       │      Count      │
+  ├──────────────────────┼─────────────────┤
+  │ Skills               │ ~70             │
+  ├──────────────────────┼─────────────────┤
+  │ MCP Servers          │ 10              │
+  ├──────────────────────┼─────────────────┤
+  │ MCP Toolboxes (GCP)  │ 8 sub-toolboxes │
+  ├──────────────────────┼─────────────────┤
+  │ Built-in Agent Types │ 8               │
+  └──────────────────────┴─────────────────┘

@@ -35,16 +35,24 @@ You are the Absolute Master Architect for AIClient2API — the single authoritat
 ## Current Verified Baseline (2026-05-28)
 
 - **112 models across 8+ active providers** — verified live via `/v1/models`
-- **73 tests passing** — `cd ~/AIClient2API && pnpm test` (8 suites, unit + integration)
+- **80 tests passing** — `cd ~/AIClient2API && pnpm test` (9 suites: 8 unit + integration; 56 unit pass offline)
 - **33 pool accounts** (13 gemini-cli-oauth + 13 gemini-antigravity + 3 claude-kiro-oauth + 1 each: nvidia-nim, github-models, openai-codex-oauth, openai-custom)
-- **2026-05-28 changes:**
-  - Phase 01 complete: Gemini 1M context injection, false), Kiro multi-beta header forwarding (tools/caching/thinking), OpenAIConverter blockStarted dedup fix (REQ-03)
+- **2026-05-28 changes (optimization pass — post Phase 01):**
+  - buildFriendlyDisplayName() exported from request-handlers.js; all /v1/models paths emit display_name = "Claude [Name] ([Provider])"
+  - antigravity-core.js thinking budget floor: max(DEFAULT_THINKING_MIN, floor(maxTokens*0.75)) prevents silent thinkingConfig removal
+  - CR-02 fixed: bracket cleanup regex in claude-kiro.js (both sites) — double-escaped \\\\[ → \\[ now matches literal `[`
+  - WR-02 fixed: response-cache.js temperature guard — only caches temperature=0 (was allowing undefined through)
+  - WR-04 fixed: initializeProviderStatus() now calls invalidateModelsCache() on reload
+  - 7 new unit tests (buildFriendlyDisplayName) + 4 display_name integration assertions; 73→80 tests; 62/62 validate-skills.sh assertions
+  - test: request-handlers-display-name.test.js (8th unit test file)
+- **2026-05-28 changes (Phase 01):**
+  - Phase 01 complete: Gemini 1M context injection, Kiro multi-beta header forwarding (tools/caching/thinking), OpenAIConverter blockStarted dedup fix (REQ-03)
   - Tier 2 (LiteLLM :4000) restored to active request path — ANTHROPIC_BASE_URL=http://127.0.0.1:4000
   - Response cache key isolation: `${protocol}:${sha256hash}` prevents OpenAI/Gemini cross-contamination
   - Gemini /v1beta/ native endpoint: request-handlers.js detects protocol collision, converts via OpenAIConverter.toGeminiResponse()
-  - Model list cache: getCachedAvailableModels() 30s TTL, invalidated on health changes
+  - Model list cache: getCachedAvailableModels() 30s TTL, invalidated on health changes and on initializeProviderStatus() (reload)
   - Model catalog: deduped kiro dot-variants, removed `auto`, 116→112 models
-  - validate-skills.sh: 62/62 assertions passing (updated line 75: updateLastModelFile unary handler 951→963)
+  - validate-skills.sh: 62/62 assertions passing
 - **2026-05-26 changes:**
   - NVIDIA NIM: dropped 4 slow-cold-start models (llama-3.3-70b, kimi-k2.6, minimax-m2.7, deepseek-v4-pro); added/kept 8 fast-warm models. `checkModelName` → `meta/llama-3.2-3b-instruct` (0.51s end-to-end).
   - Antigravity: fixed second-turn-empty bug — `OpenAIConverter.js` now preserves `tool_call.id` on Gemini `functionCall` + `functionResponse` parts (required by Vertex-Claude bridge). Regression test added in `tests/unit/openai-converter-tool-use.test.js`. 13/13 unit tests pass.
