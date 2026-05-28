@@ -29,13 +29,17 @@ CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
 CLAUDE_PROXY_BACKUP_FILE="${CLAUDE_PROXY_BACKUP_FILE:-$HOME/.claude/proxy_settings_backup.json}"
 ANTIGRAVITY_SETTINGS_FILE="${ANTIGRAVITY_SETTINGS_FILE:-$HOME/Library/Application Support/Antigravity IDE/User/settings.json}"
 
-# Single source of truth for the proxy address/token. Override via env before sourcing.
-: "${AICLIENT_BASE:=http://127.0.0.1:3000}"
+# Single source of truth for the proxy address/token.
+# PROXY_BASE points to Tier2 LiteLLM (:4000), which forwards to Tier1 (:3000).
+# SSE buffering fix (stream_timeout, X-Accel-Buffering: no) resolves the previous
+# stream corruption issue — Tier 2 is back in the request path.
+: "${PROXY_BASE:=http://127.0.0.1:4000}"
+: "${PROXY_TOKEN:=${AICLIENT_TOKEN:-sk-a60f3efdf9b97e63c84ab4a3583f9d1c}}"
+: "${AICLIENT_BASE:=${AICLIENT_BASE:-http://127.0.0.1:3000}}"
 : "${AICLIENT_TOKEN:=}"
 
-# Model to use in proxy mode (a model that the proxy serves directly, no fallback needed).
-# Override via env before sourcing if you prefer a different default.
-: "${PROXY_CLI_MODEL:=gemini-claude-sonnet-4-6}"
+# Model to use in proxy mode — short alias resolved by LiteLLM, not a provider-qualified ID.
+: "${PROXY_CLI_MODEL:=claude-sonnet}"
 # Fallback model for native mode (Anthropic alias).
 : "${NATIVE_CLI_MODEL:=sonnet}"
 
@@ -47,10 +51,9 @@ _claude_mode_require_jq() {
 }
 
 _claude_mode_proxy_alive() {
-  [ -n "$AICLIENT_TOKEN" ] || return 1
+  [ -n "$PROXY_TOKEN" ] || return 1
   curl -sf -o /dev/null --max-time 2 \
-    -H "Authorization: Bearer $AICLIENT_TOKEN" \
-    "$AICLIENT_BASE/v1/models" 2>/dev/null
+    "$PROXY_BASE/health" 2>/dev/null
 }
 
 # Persist (or remove) the proxy env block inside Claude Code's settings.json.
@@ -72,9 +75,19 @@ _claude_mode_write_settings() {
       printf '{"native_model": "%s"}' "$old_model" >"$CLAUDE_PROXY_BACKUP_FILE"
     fi
     # Set proxy env vars and switch model to a direct proxy catalog entry.
+    # Only ANTHROPIC_API_KEY is set — ANTHROPIC_AUTH_TOKEN is for Anthropic OAuth/native auth
+    # and must never be present alongside ANTHROPIC_API_KEY (causes Claude Code conflict + silent drops).
     jq --arg base "$base" --arg token "$token" --arg model "$PROXY_CLI_MODEL" \
-      '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_AUTH_TOKEN = $token | .env.ANTHROPIC_API_KEY = $token | .model = $model' \
+      '.env = (.env // {}) | .env.ANTHROPIC_BASE_URL = $base | .env.ANTHROPIC_API_KEY = $token | .env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1" | .env.CLAUDE_CODE_ATTRIBUTION_HEADER = "0" | .env.ENABLE_TOOL_SEARCH = "true" | del(.env.ANTHROPIC_AUTH_TOKEN) | .model = $model' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
+    # Clear the claude.ai OAuth token from config.json so ANTHROPIC_API_KEY is the
+    # sole auth method and Claude Code doesn't show the "both a token and an API key
+    # are set" conflict warning.
+    local claude_config="$HOME/Library/Application Support/Claude/config.json"
+    if [ -f "$claude_config" ] && command -v jq &>/dev/null; then
+      local cc_tmp="${claude_config}.tmp.$$"
+      jq 'del(.["oauth:tokenCache"])' "$claude_config" >"$cc_tmp" && mv "$cc_tmp" "$claude_config"
+    fi
     # Also sync Antigravity IDE settings: model + proxy env vars in terminal.integrated.env.osx
     if [ -f "$ANTIGRAVITY_SETTINGS_FILE" ]; then
       local ag_tmp="${ANTIGRAVITY_SETTINGS_FILE}.tmp.$$"
@@ -83,8 +96,11 @@ _claude_mode_write_settings() {
         '.["claude.model"] = $model
          | .["terminal.integrated.env.osx"] = (
              (.["terminal.integrated.env.osx"] // {})
-             + {ANTHROPIC_BASE_URL: $base, ANTHROPIC_AUTH_TOKEN: $token, ANTHROPIC_API_KEY: $token,
-                AICLIENT_BASE: $base, AICLIENT_TOKEN: $token}
+             + {ANTHROPIC_BASE_URL: $base, ANTHROPIC_API_KEY: $token,
+                AICLIENT_BASE: $base, AICLIENT_TOKEN: $token,
+                CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
+                ENABLE_TOOL_SEARCH: "true"}
+             | del(.ANTHROPIC_AUTH_TOKEN)
            )' \
         "$ANTIGRAVITY_SETTINGS_FILE" >"$ag_tmp" && mv "$ag_tmp" "$ANTIGRAVITY_SETTINGS_FILE"
     fi
@@ -94,7 +110,7 @@ _claude_mode_write_settings() {
     native_model="$(jq -r '.native_model // empty' "$CLAUDE_PROXY_BACKUP_FILE" 2>/dev/null)"
     [ -z "$native_model" ] && native_model="$NATIVE_CLI_MODEL"
     jq --arg m "$native_model" \
-      'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN, .ANTHROPIC_API_KEY)) else . end | .model = $m' \
+      'if has("env") then .env |= (del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN, .ANTHROPIC_API_KEY, .CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, .CLAUDE_CODE_ATTRIBUTION_HEADER, .ENABLE_TOOL_SEARCH)) else . end | .model = $m' \
       "$CLAUDE_SETTINGS_FILE" >"$tmp" && mv "$tmp" "$CLAUDE_SETTINGS_FILE"
     # Also sync Antigravity IDE settings: restore native model, strip proxy env vars
     if [ -f "$ANTIGRAVITY_SETTINGS_FILE" ]; then
@@ -103,7 +119,7 @@ _claude_mode_write_settings() {
         '.["claude.model"] = $model
          | .["terminal.integrated.env.osx"] = (
              (.["terminal.integrated.env.osx"] // {})
-             | del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN, .ANTHROPIC_API_KEY, .AICLIENT_BASE, .AICLIENT_TOKEN)
+             | del(.ANTHROPIC_BASE_URL, .ANTHROPIC_AUTH_TOKEN, .ANTHROPIC_API_KEY, .AICLIENT_BASE, .AICLIENT_TOKEN, .CLAUDE_CODE_ATTRIBUTION_HEADER, .ENABLE_TOOL_SEARCH)
            )' \
         "$ANTIGRAVITY_SETTINGS_FILE" >"$ag_tmp" && mv "$ag_tmp" "$ANTIGRAVITY_SETTINGS_FILE"
     fi
@@ -113,27 +129,22 @@ _claude_mode_write_settings() {
 claude-proxy() {
   _claude_mode_require_jq || return 1
 
-  if [ -z "$AICLIENT_TOKEN" ]; then
-    echo "ERROR: AICLIENT_TOKEN is empty. Export it (or source ~/.zshrc) before toggling." >&2
+  if [ -z "$PROXY_TOKEN" ]; then
+    echo "ERROR: AICLIENT_TOKEN is empty. Source ~/.zshrc before toggling." >&2
     return 1
   fi
 
-  local base="$AICLIENT_BASE" token="$AICLIENT_TOKEN"
-  if [ -f "$CLAUDE_PROXY_BACKUP_FILE" ]; then
-    local backup_base backup_token
-    backup_base="$(jq -r '.ANTHROPIC_BASE_URL // empty' "$CLAUDE_PROXY_BACKUP_FILE")"
-    backup_token="$(jq -r '.ANTHROPIC_AUTH_TOKEN // empty' "$CLAUDE_PROXY_BACKUP_FILE")"
-    [ -n "$backup_base" ] && base="$backup_base"
-    [ -n "$backup_token" ] && token="$backup_token"
-  fi
+  local base="$PROXY_BASE" token="$PROXY_TOKEN"
 
   _claude_mode_write_settings on "$base" "$token" || return 1
   export ANTHROPIC_BASE_URL="$base"
   export ANTHROPIC_API_KEY="$token"
-  export ANTHROPIC_AUTH_TOKEN="$token"
+  unset ANTHROPIC_AUTH_TOKEN
+  export CLAUDE_CODE_ATTRIBUTION_HEADER=0
+  export ENABLE_TOOL_SEARCH=true
 
   if ! _claude_mode_proxy_alive; then
-    echo "WARN: Proxy at $base did not respond. Run 'start-proxies' (or 'npm start' in the AIClient2API dir)." >&2
+    echo "WARN: LiteLLM at $base did not respond. Run 'start-proxies' first." >&2
   fi
   echo "proxy" > /tmp/aiclient_mode
   echo "✅ Claude Code → PROXY mode ($base)"
@@ -142,34 +153,18 @@ claude-proxy() {
 claude-native() {
   _claude_mode_require_jq || return 1
 
-  # Kill the proxy process when leaving proxy mode so it doesn't linger.
-  local PORT=3000
-  local PID
-  PID=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)
-  if [ -n "$PID" ]; then
-    echo "🛑 Stopping proxy process (PID $PID)..."
-    kill "$PID" 2>/dev/null
-    for i in $(seq 1 8); do
-      if [ -z "$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)" ]; then
-        break
-      fi
-      sleep 0.5
-    done
-    local REMAIN
-    REMAIN=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null)
-    if [ -n "$REMAIN" ]; then
-      echo "⚠️  Process still listening, sending SIGKILL..."
-      kill -9 "$REMAIN" 2>/dev/null
-      sleep 1
-    fi
-  fi
+  # NOTE: intentionally does NOT stop the proxy process. Killing :3000/:4000 while
+  # a Claude session is mid-execution disconnects it. Use stop-proxies explicitly
+  # when you want to shut the gateway down.
 
   # Back up current proxy settings (if any) before removing them.
   if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
     local has_proxy
     has_proxy="$(jq -r '(.env // {}) | (has("ANTHROPIC_BASE_URL") or has("ANTHROPIC_AUTH_TOKEN"))' "$CLAUDE_SETTINGS_FILE" 2>/dev/null || echo false)"
     if [ "$has_proxy" = "true" ]; then
-      jq '.env // {} | {ANTHROPIC_BASE_URL: (.ANTHROPIC_BASE_URL // ""), ANTHROPIC_AUTH_TOKEN: (.ANTHROPIC_AUTH_TOKEN // "")}' \
+      # Only back up non-empty values — an empty ANTHROPIC_AUTH_TOKEN causes an auth
+      # conflict warning when restored alongside ANTHROPIC_API_KEY on next proxy switch.
+      jq '.env // {} | {ANTHROPIC_BASE_URL: (.ANTHROPIC_BASE_URL // "")} | with_entries(select(.value != ""))' \
         "$CLAUDE_SETTINGS_FILE" >"$CLAUDE_PROXY_BACKUP_FILE"
     fi
   fi
@@ -178,6 +173,8 @@ claude-native() {
   unset ANTHROPIC_BASE_URL
   unset ANTHROPIC_API_KEY
   unset ANTHROPIC_AUTH_TOKEN
+  unset CLAUDE_CODE_ATTRIBUTION_HEADER
+  unset ENABLE_TOOL_SEARCH
   rm -f /tmp/aiclient_last_model
   echo "native" > /tmp/aiclient_mode
 
@@ -204,9 +201,9 @@ claude-mode-status() {
   echo "  settings.json:     $settings_mode"
   echo "  current shell env: $env_mode"
   if _claude_mode_proxy_alive; then
-    echo "  proxy reachable:   yes ($AICLIENT_BASE)"
+    echo "  AIClient2API :3000: reachable ($PROXY_BASE)"
   else
-    echo "  proxy reachable:   no  ($AICLIENT_BASE)"
+    echo "  AIClient2API :3000: not reachable — run start-proxies"
   fi
   echo "──────────────────────────────────────────"
 }
