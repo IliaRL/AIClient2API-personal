@@ -59,20 +59,20 @@ check "routing" "normalizeConfiguredProviders in config-manager.js:12" \
   "grep -n 'normalizeConfiguredProviders' '$SRC/core/config-manager.js' | head -1 | grep -q '12:'"
 check "routing" "handleAPIRequests in api-manager.js:32" \
   "grep -n 'handleAPIRequests' '$SRC/services/api-manager.js' | head -1 | grep -q '32:'"
-check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:602" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '602:'"
+check "routing" "fallback tracking: updateLastModelFile in request-handlers.js:614" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '614:'"
 check "routing" "handleModelListRequest in request-handlers.js (model aggregation)" \
   "grep -q 'handleModelListRequest' '$SRC/utils/request-handlers.js'"
 
 # ── aiclient-statusline ───────────────────────────────────────────────────────
 echo ""
 echo "[ aiclient-statusline ]"
-check "statusline" "updateLastModelFile renames to /tmp/aiclient_last_model at request-handlers.js:345" \
-  "grep -n \"fs.rename.*aiclient_last_model'\" '$SRC/utils/request-handlers.js' | head -1 | grep -q '345:'"
-check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:602" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '602:'"
-check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:963" \
-  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '963:'"
+check "statusline" "updateLastModelFile renames to /tmp/aiclient_last_model at request-handlers.js:357" \
+  "grep -n \"fs.rename.*aiclient_last_model'\" '$SRC/utils/request-handlers.js' | head -1 | grep -q '357:'"
+check "statusline" "updateLastModelFile call in stream handler at request-handlers.js:614" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '2p' | grep -q '614:'"
+check "statusline" "updateLastModelFile call in unary handler at request-handlers.js:975" \
+  "grep -n 'updateLastModelFile' '$SRC/utils/request-handlers.js' | sed -n '3p' | grep -q '975:'"
 
 # ── aiclient-debug ────────────────────────────────────────────────────────────
 echo ""
