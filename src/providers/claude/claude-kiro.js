@@ -1630,7 +1630,7 @@ You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer t
             for (const tc of bracketToolCalls) {
                 const funcName = tc.function.name;
                 const escapedName = funcName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const pattern = new RegExp(`\\\\[Called\\\\s+${escapedName}\\\\s+with\\\\s+args:\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}\\\\]`, 'g');
+                const pattern = new RegExp(`\\[Called\\s+${escapedName}\\s+with\\s+args:\\s*\\{[\\s\\S]*?\\}\\]`, 'g');
                 fullContent = fullContent.replace(pattern, '');
             }
             fullContent = fullContent.trim();
@@ -2105,7 +2105,7 @@ You are Claude, a helpful AI assistant made by Anthropic. You must NEVER refer t
             for (const tc of uniqueToolCalls) {
                 const funcName = tc.function.name;
                 const escapedName = funcName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const pattern = new RegExp(`\\\\[Called\\\\s+${escapedName}\\\\s+with\\\\s+args:\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}\\\\]`, 'g');
+                const pattern = new RegExp(`\\[Called\\s+${escapedName}\\s+with\\s+args:\\s*\\{[\\s\\S]*?\\}\\]`, 'g');
                 fullResponseText = fullResponseText.replace(pattern, '');
             }
             fullResponseText = fullResponseText.trim();

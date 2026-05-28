@@ -30,9 +30,9 @@ export function getCacheKey(requestBody, model) {
     if (!requestBody || !model) return null;
     // Never cache streaming requests
     if (requestBody.stream === true) return null;
-    // Never cache non-deterministic requests (temperature > 0 or not set to 0 explicitly)
+    // Never cache non-deterministic requests — only cache when temperature is explicitly 0
     const temp = requestBody.temperature;
-    if (temp != null && temp !== 0) return null;
+    if (temp == null || temp !== 0) return null;
     // Never cache turns that include tool_result blocks — responses depend on prior tool execution
     const messages = requestBody.messages;
     if (Array.isArray(messages)) {

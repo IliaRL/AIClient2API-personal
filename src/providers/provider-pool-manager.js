@@ -921,6 +921,7 @@ export class ProviderPoolManager {
             
         }
         this._log('info', `Initialized provider statuses: ok (maxErrorCount: ${this.maxErrorCount})`);
+        this.invalidateModelsCache();
     }
 
     /**
