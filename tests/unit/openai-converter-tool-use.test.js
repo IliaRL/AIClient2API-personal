@@ -184,6 +184,65 @@ describe('Multi-turn conversation after tool use', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 4b. Tool call id is preserved on functionCall AND functionResponse
+//     Antigravity's Claude bridge (Vertex) rejects the request with
+//     "messages.N.content.M.tool_use.id: Field required" if the id is dropped
+//     on the assistant turn when the conversation is replayed.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Tool-call id preservation (Antigravity Claude bridge requirement)', () => {
+    test('OpenAI tool_calls → functionCall preserves the id', () => {
+        const messages = [
+            { role: 'user', content: 'ls please' },
+            {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{
+                    id: 'tc_preserve_001',
+                    type: 'function',
+                    function: { name: 'Bash', arguments: '{"command":"ls"}' }
+                }]
+            },
+            { role: 'tool', tool_call_id: 'tc_preserve_001', content: 'src/' }
+        ];
+        const contents = getContents(messages);
+        const modelNode = contents.find(c => c.role === 'model');
+        const fc = modelNode.parts.find(p => p.functionCall).functionCall;
+        expect(fc.id).toBe('tc_preserve_001');
+
+        const userNode = contents.find(c => c.parts?.some(p => p.functionResponse));
+        const fr = userNode.parts.find(p => p.functionResponse).functionResponse;
+        expect(fr.id).toBe('tc_preserve_001');
+    });
+
+    test('Anthropic tool_use → functionCall preserves the id', () => {
+        const messages = [
+            { role: 'user', content: 'ls please' },
+            {
+                role: 'assistant',
+                content: [
+                    { type: 'text', text: 'Sure:' },
+                    { type: 'tool_use', id: 'tu_preserve_001', name: 'Bash', input: { command: 'ls' } }
+                ]
+            },
+            {
+                role: 'user',
+                content: [
+                    { type: 'tool_result', tool_use_id: 'tu_preserve_001', content: 'src/' }
+                ]
+            }
+        ];
+        const contents = getContents(messages);
+        const modelNode = contents.find(c => c.role === 'model');
+        const fc = modelNode.parts.find(p => p.functionCall).functionCall;
+        expect(fc.id).toBe('tu_preserve_001');
+
+        const userNode = contents.find(c => c.parts?.some(p => p.functionResponse));
+        const fr = userNode.parts.find(p => p.functionResponse).functionResponse;
+        expect(fr.id).toBe('tu_preserve_001');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 5. Missing tool_call_id / tool_use_id → graceful skip, no crash
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Graceful handling of missing IDs', () => {
